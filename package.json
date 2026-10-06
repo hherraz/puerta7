@@ -1,0 +1,16 @@
+{
+    "name": "puerta7",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Puerta 7: entradas NFT con Asiento y es on-chain",
+    "packageManager": "pnpm@11.24.0",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "compilar": "pnpm --filter @puerta7/hardhat compilar",
+        "test": "pnpm --filter @puerta7/hardhat test",
+        "nodo": "pnpm --filter @puerta7/hardhat nodo",
+        "desplegar": "pnpm --filter @puerta7/hardhat desplegar"
+    }
+}

@@ -1,0 +1,17 @@
+# Dependecias
+node_modules/
+
+# Hardhat
+cache/
+artifacts/
+coverage/
+
+# variables de entorno
+.env
+.env.*
+!.env.example
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log 

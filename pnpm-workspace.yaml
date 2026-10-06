@@ -1,0 +1,8 @@
+packages:
+  - 1-hardhat
+  - 2-nextjs
+allowBuilds:
+  esbuild: true
+  sharp: false
+  unrs-resolver: false
+  
