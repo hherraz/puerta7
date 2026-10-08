@@ -2,6 +2,7 @@ import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mo
 import { defineConfig } from "hardhat/config";
 
 export default defineConfig({
+    plugins: [hardhatToolboxMochaEthersPlugin],
     solidity: {
         version: "0.8.34"
     },

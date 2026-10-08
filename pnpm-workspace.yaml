@@ -1,8 +1,10 @@
 packages:
   - 1-hardhat
-  - 2-nextjs
+  - 2-front
 allowBuilds:
+  bufferutil: set this to true or false
   esbuild: true
+  keccak: set this to true or false
   sharp: false
   unrs-resolver: false
-  
+  utf-8-validate: set this to true or false

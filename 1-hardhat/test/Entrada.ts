@@ -190,7 +190,7 @@ describe("Entrada", function () {
                 const { entrada } = await desplegar();
                 await expect(
                     entrada.emitir([], [], [])
-                ).to.be.reverted;
+                ).to.be.revertedWith("Lote vacio");
             });
         });
 

@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Defaults
+   - Por defecto pintamos el off-black desde el shell para
+     evitar flashes blancos en SSR/hidratación.
+   ============================================================ */
+:root {
+    color-scheme: dark;
+}
+
+html {
+    background-color: #0c0a09;
+    color: #fafaf9;
+    /* Geist se carga vía next/font; las variables quedan en :root */
+    font-feature-settings: "ss01", "cv02", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    min-height: 100dvh;
+}
+
+/* ============================================================
+   Patrones reutilizables — uno por componente, no por archivo.
+   ============================================================ */
+@layer components {
+    /* Hairline horizontal consistente con la paleta del design system */
+    .hairline {
+        @apply border-t border-ink-800/60;
+    }
+
+    /* Etiqueta de sección — la capita de arriba de cada bloque */
+    .etiqueta {
+        @apply font-mono text-xs uppercase tracking-[0.18em] text-ink-400;
+    }
+
+    /* Botón tactile — usado en hover/active de cualquier botón primario */
+    .tactil {
+        @apply transition-transform duration-300 ease-premium;
+    }
+    .tactil:hover {
+        @apply -translate-y-[1px];
+    }
+    .tactil:active {
+        @apply translate-y-0 scale-[0.985];
+    }
+
+    /* Foco accesible en cualquier interactivo */
+    .foco-anillo:focus-visible {
+        @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-ink-950;
+    }
+
+    /* Stagger de entrada: cada hijo espera su turno */
+    .stagger > * {
+        @apply animate-float-up;
+        animation-delay: calc(var(--index, 0) * 60ms);
+    }
+}
+
+/* ============================================================
+   Motion reduce — desactiva animaciones para quienes lo pidieron
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        transition-duration: 0.001ms !important;
+    }
+}
