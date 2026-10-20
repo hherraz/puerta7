@@ -1,73 +1,69 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
+import { useEffect } from "react";
 
 import { Boton } from "@/components/ui/Boton";
 import { Etiqueta } from "@/components/ui/Etiqueta";
 import { Separador } from "@/components/ui/Separador";
 import { Tarjeta } from "@/components/ui/Tarjeta";
+import { AvisoRed } from "@/components/web3/AvisoRed";
+import { EstadoTransaccion } from "@/components/web3/EstadoTransaccion";
 import { ConectarBilletera } from "@/components/ConectarBilletera";
 import { SECTORES_ORDENADOS, NOMBRE_SECTOR } from "@/lib/sectores";
 import { direccionEntrada, ENTRADA_ABI } from "@/lib/contrato";
 import { formatoPrecio } from "@/lib/formato";
-import { estadoTx } from "@/lib/estadoTx";
+import { useTransaccion } from "@/lib/estadoTx";
 
 /**
  * Página Comprador.
  *
- * - Si no hay wallet conectada, prompt a conectar.
- * - Lee `precio()` y muestra el monto.
- * - Botón "Comprar" arma la tx `comprar()` payable con `precio`.
+ * `Entrada.comprar()` no recibe argumentos y exige `msg.value == precio`
+ * exacto. Eso significa que una compra es UNA entrada por transacción: no
+ * hay forma de comprar tres en una sola tx sin que el contrato la rechace.
  *
- * Limitación actual: el contrato `Entrada.sol` aún no implementa
- * `comprar()` ni `emitidas()` / `disponibles()`. Si el read de precio
- * falla, lo mostramos como "—" pero dejamos la CTA igual: al hacer
- * click, la tx devolverá revertido con un mensaje legible.
+ * Antes esta página tenía un selector de 1 a 8 que mandaba
+ * `precio × cantidad`, así que comprar dos o más fallaba siempre con
+ * "Pago incorrecto". Se sacó el selector en vez de agregar un Carrito: el
+ * contrato no lo soporta y prometerlo sería una mentira.
  */
 export default function ComprarPage() {
-    const { isConnected } = useAccount();
-    const [cantidad, setCantidad] = useState(1);
+    const { isConnected, chainId } = useAccount();
+    const direccion = direccionEntrada(chainId);
 
     const { data: precioWei } = useReadContract({
-        address: direccionEntrada(),
+        address: direccion,
         abi: ENTRADA_ABI,
         functionName: "precio",
     });
 
     const { data: disponibles } = useReadContract({
-        address: direccionEntrada(),
+        address: direccion,
         abi: ENTRADA_ABI,
         functionName: "disponibles",
     });
 
-    const {
-        writeContract,
-        data: hash,
-        isPending,
-        error,
-        reset,
-    } = useWriteContract();
-    const { isLoading: esperando, isSuccess: confirmado } = useWaitForTransactionReceipt({
-        hash,
-    });
-
-    // Reset tx exitosa después de 6s para que el usuario pueda comprar otra
-    useEffect(() => {
-        if (!confirmado) return;
-        const t = setTimeout(() => reset(), 6000);
-        return () => clearTimeout(t);
-    }, [confirmado, reset]);
-
-    const totalWei = useMemo(
-        () =>
-            precioWei !== undefined ? precioWei * BigInt(Math.max(1, cantidad)) : undefined,
-        [precioWei, cantidad],
+    const compra = useTransaccion(
+        precioWei !== undefined && precioWei > 0n
+            ? {
+                  address: direccion,
+                  abi: ENTRADA_ABI,
+                  functionName: "comprar",
+                  value: precioWei,
+              }
+            : undefined,
     );
 
+    // Tras confirmar, se vuelve al estado inicial para que el comprador
+    // pueda seguir comprando sin recargar la página.
+    useEffect(() => {
+        if (compra.fase !== "confirmada") return;
+        const t = setTimeout(() => compra.reiniciar(), 6000);
+        return () => clearTimeout(t);
+    }, [compra]);
+
     const agotado = disponibles === 0n;
-    const precioCargado = precioWei !== undefined;
 
     if (!isConnected) {
         return (
@@ -88,9 +84,10 @@ export default function ComprarPage() {
     return (
         <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
             <Header />
+            <AvisoRed />
 
             <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[2rem] border border-ink-800/60 md:grid-cols-2">
-                {/* Columna izquierda — selección */}
+                {/* Columna izquierda — qué estás comprando */}
                 <div className="space-y-8 bg-ink-900 p-10">
                     <div>
                         <p className="etiqueta">Precio por entrada</p>
@@ -100,7 +97,7 @@ export default function ComprarPage() {
                     </div>
 
                     <div>
-                        <p className="etiqueta">Sectores disponibles</p>
+                        <p className="etiqueta">Sectores posibles</p>
                         <ul className="mt-3 space-y-2 text-sm text-ink-300">
                             {SECTORES_ORDENADOS.map((s) => (
                                 <li
@@ -128,49 +125,33 @@ export default function ComprarPage() {
 
                 {/* Columna derecha — acción */}
                 <div className="space-y-8 bg-ink-950 p-10">
-                    <Cantidad value={cantidad} onChange={setCantidad} />
-
-                    <Separador />
-
                     <div className="space-y-2">
                         <p className="etiqueta">Total a pagar</p>
                         <p className="font-mono text-3xl font-semibold tracking-tight text-ink-50">
-                            {formatoPrecio(totalWei)}
+                            {formatoPrecio(precioWei)}
                         </p>
                         <p className="text-xs text-ink-500">
                             Pago exacto. Si mandás de más o de menos, el contrato rechaza.
+                            Una compra es una entrada: para varias, repetí la operación.
                         </p>
                     </div>
+
+                    <Separador />
 
                     <Boton
                         bloque
                         tamano="lg"
                         variante="primario"
-                        cargando={isPending || esperando}
-                        disabled={!precioCargado || agotado}
-                        onClick={() => {
-                            if (!precioWei) return;
-                            writeContract({
-                                address: direccionEntrada(),
-                                abi: ENTRADA_ABI,
-                                functionName: "comprar",
-                                value: precioWei * BigInt(cantidad),
-                            });
-                        }}
+                        cargando={compra.ocupada}
+                        disabled={precioWei === undefined || agotado}
+                        onClick={compra.ejecutar}
                     >
-                        Comprar {cantidad > 1 ? `${cantidad} entradas` : "entrada"}
+                        {agotado ? "No quedan entradas" : "Comprar entrada"}
                     </Boton>
 
-                    {hash && (
-                        <p className="font-mono text-xs text-ink-400">
-                            Tx: {hash.slice(0, 10)}…{hash.slice(-4)} ·{" "}
-                            {estadoTx(esperando, confirmado)}
-                        </p>
-                    )}
-                    {error && (
-                        <p className="text-xs text-red-400">{error.message.split("\n")[0]}</p>
-                    )}
-                    {confirmado && (
+                    <EstadoTransaccion transaccion={compra} />
+
+                    {compra.fase === "confirmada" && (
                         <p className="text-xs text-emerald-400">
                             Listo — revisá{" "}
                             <Link href="/mis-entradas" className="underline underline-offset-4">
@@ -197,39 +178,5 @@ function Header() {
                 azar entre las disponibles; no se puede elegir.
             </p>
         </header>
-    );
-}
-
-interface CantidadProps {
-    readonly value: number;
-    readonly onChange: (next: number) => void;
-}
-
-function Cantidad({ value, onChange }: CantidadProps) {
-    return (
-        <div>
-            <p className="etiqueta">Cantidad</p>
-            <div className="mt-3 inline-flex items-center rounded-2xl border border-ink-800/60">
-                <button
-                    type="button"
-                    onClick={() => onChange(Math.max(1, value - 1))}
-                    className="tactil foco-anello h-10 w-10 text-ink-300 hover:text-ink-50"
-                    aria-label="Restar una entrada"
-                >
-                    −
-                </button>
-                <span className="min-w-[40px] text-center font-mono text-lg text-ink-50">
-                    {value}
-                </span>
-                <button
-                    type="button"
-                    onClick={() => onChange(Math.min(8, value + 1))}
-                    className="tactil foco-anello h-10 w-10 text-ink-300 hover:text-ink-50"
-                    aria-label="Sumar una entrada"
-                >
-                    +
-                </button>
-            </div>
-        </div>
     );
 }

@@ -1,87 +1,121 @@
 "use client";
 
-import { useReadContracts, useAccount } from "wagmi";
+import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { useMemo } from "react";
 
-import { direccionEntrada, ENTRADA_ABI } from "@/lib/contrato";
+import { direccionEntrada, sistemaDesplegado, ENTRADA_ABI } from "@/lib/contrato";
 import { decodeEstado } from "@/lib/estados";
-import type { EntradaVista } from "@/tipos/entrada";
+import { ESTADO, SECTOR, type Asiento, type EntradaVista } from "@/tipos/entrada";
 
 /**
- * Hook: lee las entradas que el dueño `address` tiene en el contrato
- * `Entrada`. Estrategia:
- *   1. Iteramos tokenId 1..CAP preguntando `ownerOf` + `estado`
- *      en batch con `multicall` (un solo request).
- *   2. Filtramos las del `address` de la wallet conectada.
+ * Entradas que la wallet conectada tiene en `Entrada`.
  *
- * CAP se fija en 64 porque sería el máximo razonable para una
- * primera edición. Cuando el contrato exponga `emitidas()` real,
- * reemplazamos el bucle por un `useReadContract({ emitidas })` + bucle
- * dinámico.
+ * El contrato no expone un `entradasDe(direccion)`: hay que barrer los
+ * tokenIds. Por eso primero leemos `emitidas()` y después preguntamos, en
+ * un solo `multicall`, tres cosas por token: quién es el dueño, en qué
+ * estado está y qué asiento ocupa.
  *
- * Fuera del alcance de la v1: subgraph / Ponder. Si el evento crece
- * a >10k NFTs, mover a un indexer.
+ * No hay tope de recorrido a propósito. Un tope que trunca en silencio
+ * mostraría que faltan entradas sin explicar por qué; si un evento llegara
+ * a tener miles, el arreglo es un índiceador y este hook es el lugar donde
+ * se cambia.
  */
-const CAP = 64n;
-const numeroACap = Number(CAP);
-
-/** Construye los contratos batch para wagmi. */
-function construirContratos() {
-    const aBigInt = (idx: number) => BigInt(idx + 1);
-    const ownerOfCalls = Array.from({ length: numeroACap }, (_, i) => ({
-        address: direccionEntrada(),
-        abi: ENTRADA_ABI,
-        functionName: "ownerOf" as const,
-        args: [aBigInt(i)] as const,
-    }));
-    const estadoCalls = Array.from({ length: numeroACap }, (_, i) => ({
-        address: direccionEntrada(),
-        abi: ENTRADA_ABI,
-        functionName: "estado" as const,
-        args: [aBigInt(i)] as const,
-    }));
-    return [...ownerOfCalls, ...estadoCalls];
-}
-
-/** Convierte un par (owner, code) en una entrada del dueño o null. */
-function aEntrada(
-    tokenId: number,
-    owner: string | undefined,
-    code: number | undefined,
-    walletAddress: string,
-): EntradaVista | null {
-    if (!owner || code === undefined) return null;
-    if (owner.toLowerCase() !== walletAddress.toLowerCase()) return null;
-    return {
-        tokenId: BigInt(tokenId),
-        dueno: owner as `0x${string}`,
-        estado: decodeEstado(code),
-        // El ABI actual no expone `asiento(uint256)` todavía.
-        // Placeholder hasta que se agregue al contrato.
-        asiento: { sector: 1, fila: "A", asiento: "1" },
-    };
-}
-
 export function useEntradasMias() {
-    const { address } = useAccount();
+    const { address, chainId } = useAccount();
+    const direccion = direccionEntrada(chainId);
+    const habilitado = sistemaDesplegado(chainId);
 
-    const contracts = useMemo(() => construirContratos(), []);
-    const contratoDesplegado =
-        direccionEntrada() !== "0x0000000000000000000000000000000000000";
-
-    const { data, isLoading, error, refetch } = useReadContracts({
-        contracts,
-        query: { enabled: contratoDesplegado },
+    // Paso 1: cuántas entradas existen. Define el largo del barrido.
+    const { data: emitidas } = useReadContract({
+        address: direccion,
+        abi: ENTRADA_ABI,
+        functionName: "emitidas",
+        query: { enabled: habilitado },
     });
 
-    const entradas: EntradaVista[] = useMemo(() => {
-        if (!data || !address) return [];
-        return Array.from({ length: data.length / 2 }, (_, i) => {
-            const owner = data[i * 2]?.result as string | undefined;
-            const code = data[i * 2 + 1]?.result as number | undefined;
-            return aEntrada(i, owner, code, address);
-        }).filter((e): e is EntradaVista => e !== null);
-    }, [data, address]);
+    const total = emitidas ?? 0n;
 
-    return { entradas, isLoading, error, refetch };
+    // Paso 2: un lote de lecturas por token, aplanado en un solo array.
+    const contratos = useMemo(() => {
+        if (!habilitado || total === 0n) return [];
+
+        return Array.from({ length: Number(total) }).flatMap((_, i) => {
+            const tokenId = BigInt(i + 1);
+            return [
+                {
+                    address: direccion,
+                    abi: ENTRADA_ABI,
+                    functionName: "ownerOf" as const,
+                    args: [tokenId] as const,
+                },
+                {
+                    address: direccion,
+                    abi: ENTRADA_ABI,
+                    functionName: "estado" as const,
+                    args: [tokenId] as const,
+                },
+                {
+                    address: direccion,
+                    abi: ENTRADA_ABI,
+                    functionName: "datosAsiento" as const,
+                    args: [tokenId] as const,
+                },
+            ];
+        });
+    }, [habilitado, direccion, total]);
+
+    const { data, isLoading, error, refetch } = useReadContracts({
+        contracts: contratos,
+        query: { enabled: habilitado && contratos.length > 0 },
+        allowFailure: true,
+    });
+
+    const entradas = useMemo<EntradaVista[]>(() => {
+        if (!data || !address) return [];
+
+        const propio = address.toLowerCase();
+        const resultado: EntradaVista[] = [];
+
+        for (let i = 0; i < Number(total); i++) {
+            const owner = data[i * 3]?.result;
+            const codigo = data[i * 3 + 1]?.result;
+            const datos = data[i * 3 + 2]?.result;
+
+            // Si `ownerOf` revirtió el token no existe (quemado): nada que
+            // mostrar. Esto solo pasa para entradas que el canje destruyó.
+            if (typeof owner !== "string") continue;
+            if (owner.toLowerCase() !== propio) continue;
+
+            // El lote mezcla tipos de retorno, así que `codigo` y `datos`
+            // llegan como unión. Hay que angostarlos por forma.
+            const estado = typeof codigo === "number" ? decodeEstado(codigo) : ESTADO.Inexistente;
+
+            resultado.push({
+                tokenId: BigInt(i + 1),
+                dueno: owner as `0x${string}`,
+                estado,
+                // `datosAsiento` devuelve el sector real. Antes esta línea
+                // hardcodeaba sector 1 / fila A / asiento 1, así que todas
+                // las entradas se veían idénticas.
+                asiento: aAsiento(datos),
+            });
+        }
+
+        return resultado;
+    }, [data, address, total]);
+
+    return { entradas, isLoading, error, refetch, totalEmitidas: total };
+}
+
+/** El retorno de `datosAsiento` es `[sector, fila, asiento]`. */
+function aAsiento(datos: unknown): Asiento {
+    if (!Array.isArray(datos) || datos.length < 3) {
+        return { sector: SECTOR.Invalido, fila: "—", asiento: "—" };
+    }
+
+    return {
+        sector: Number(datos[0]) as Asiento["sector"],
+        fila: String(datos[1]),
+        asiento: String(datos[2]),
+    };
 }

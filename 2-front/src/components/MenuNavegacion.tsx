@@ -19,6 +19,10 @@ const ITEMS: Array<{ href: string; etiqueta: string }> = [
     { href: "/", etiqueta: "Inicio" },
     { href: "/comprar", etiqueta: "Comprar" },
     { href: "/mis-entradas", etiqueta: "Mis entradas" },
+    { href: "/sorteo", etiqueta: "Sorteo" },
+    { href: "/reventa", etiqueta: "Reventa" },
+    { href: "/puntos", etiqueta: "Puntos" },
+    { href: "/canje", etiqueta: "Canje" },
     { href: "/portero", etiqueta: "Portero" },
     { href: "/organizador", etiqueta: "Organizador" },
 ];

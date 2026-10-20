@@ -1,138 +1,47 @@
 /**
- * ABI del contrato `Entrada` y dirección por chain.
+ * ABIs y direcciones de los contratos de Puerta 7.
  *
- * El ABI refleja la API **deseada** (la que cubren los tests en
- * `1-hardhat/test/Entrada.ts`). El `Entrada.sol` actual está incompleto:
- * aún no implementa `comprar()`, `usar()`, `emitidas()` ni `disponibles()`.
+ * Los ABIs NO se escriben a mano: los genera `pnpm --filter @puerta7/hardhat
+ * exportar` leyendo los artefactos de Hardhat. Este módulo solo reexporta y
+ * arma los atajos que consume la UI, para que ninguna página ande
+ * importando de `abis/` directamente.
  *
- * Mientras el contrato no esté terminado, las llamadas a esas funciones
- * devolverán "function not found" o revertirán. La UI lo trata con copy
- * claro (ver componentes de Comprador y Portero).
+ * Para cambiar los contratos: `pnpm compilar && pnpm desplegar && pnpm exportar`.
  */
 
 import type { Address } from "viem";
 
-/** ABI como `const` para que viem lo pueda inferir. */
-export const ENTRADA_ABI = [
-    // --- lectura -------------------------------------------------------------
-    {
-        type: "function",
-        name: "precio",
-        stateMutability: "view",
-        inputs: [],
-        outputs: [{ name: "", type: "uint256" }],
-    },
-    {
-        type: "function",
-        name: "portero",
-        stateMutability: "view",
-        inputs: [],
-        outputs: [{ name: "", type: "address" }],
-    },
-    {
-        type: "function",
-        name: "estado",
-        stateMutability: "view",
-        inputs: [{ name: "tokenId", type: "uint256" }],
-        outputs: [{ name: "", type: "uint8" }],
-    },
-    {
-        type: "function",
-        name: "emitidas",
-        stateMutability: "view",
-        inputs: [],
-        outputs: [{ name: "", type: "uint256" }],
-    },
-    {
-        type: "function",
-        name: "disponibles",
-        stateMutability: "view",
-        inputs: [],
-        outputs: [{ name: "", type: "uint256" }],
-    },
-    {
-        type: "function",
-        name: "balanceOf",
-        stateMutability: "view",
-        inputs: [{ name: "owner", type: "address" }],
-        outputs: [{ name: "", type: "uint256" }],
-    },
-    {
-        type: "function",
-        name: "ownerOf",
-        stateMutability: "view",
-        inputs: [{ name: "tokenId", type: "uint256" }],
-        outputs: [{ name: "", type: "address" }],
-    },
-    {
-        type: "function",
-        name: "tokenURI",
-        stateMutability: "view",
-        inputs: [{ name: "tokenId", type: "uint256" }],
-        outputs: [{ name: "", type: "string" }],
-    },
-    {
-        type: "function",
-        name: "name",
-        stateMutability: "view",
-        inputs: [],
-        outputs: [{ name: "", type: "string" }],
-    },
-    {
-        type: "function",
-        name: "symbol",
-        stateMutability: "view",
-        inputs: [],
-        outputs: [{ name: "", type: "string" }],
-    },
-    // --- escritura (Organizador) --------------------------------------------
-    {
-        type: "function",
-        name: "emitir",
-        stateMutability: "nonpayable",
-        // Firma esperada por los tests: (string[], string[], uint16[])
-        inputs: [
-            { name: "filas", type: "string[]" },
-            { name: "asientos", type: "string[]" },
-            { name: "sectores", type: "uint16[]" },
-        ],
-        outputs: [],
-    },
-    {
-        type: "function",
-        name: "retirar",
-        stateMutability: "nonpayable",
-        inputs: [],
-        outputs: [],
-    },
-    // --- escritura (Comprador) ---------------------------------------------
-    {
-        type: "function",
-        name: "comprar",
-        stateMutability: "payable",
-        inputs: [],
-        outputs: [],
-    },
-    // --- escritura (Portero) -----------------------------------------------
-    {
-        type: "function",
-        name: "usar",
-        stateMutability: "nonpayable",
-        inputs: [{ name: "tokenId", type: "uint256" }],
-        outputs: [],
-    },
-    // --- eventos -------------------------------------------------------------
-    { type: "event", name: "EntradaEmitida", inputs: [], anonymous: false },
-    { type: "event", name: "EntradaComprada", inputs: [], anonymous: false },
-    { type: "event", name: "EntradaUsada", inputs: [], anonymous: false },
-    { type: "event", name: "FondosRetirados", inputs: [], anonymous: false },
-    { type: "event", name: "Transfer", inputs: [], anonymous: false },
-] as const;
+import { direccion } from "@/lib/direcciones";
 
-/** Dirección del contrato leído desde `.env`. */
-export function direccionEntrada(): Address {
-    const raw = process.env.NEXT_PUBLIC_CONTRATO_ENTRADA;
-    // Cast controlado: Address es `0x${string}`. Si está vacío, usamos
-    // la dirección cero — wagmi devolverá 0 / revertirá al leer.
-    return (raw && raw !== "") ? (raw as Address) : "0x0000000000000000000000000000000000000000";
+export { ENTRADA_ABI } from "@/lib/abis/Entrada";
+export { PUNTOS_ABI } from "@/lib/abis/Puntos";
+export { CANJE_ABI } from "@/lib/abis/Canje";
+export { REVENTA_ABI } from "@/lib/abis/Reventa";
+export { SORTEO_ABI } from "@/lib/abis/Sorteo";
+export { CHAIN_ID, sistemaDesplegado } from "@/lib/direcciones";
+
+/** La dirección cero. Un hook nunca debe leer contra esta. */
+export const DIRECCION_CERO: Address = "0x0000000000000000000000000000000000000000";
+
+/** Nombres de los contratos del sistema, en el orden de despliegue. */
+export type NombreContrato = "Entrada" | "Puntos" | "Canje" | "Reventa" | "Sorteo";
+
+/**
+ * Dirección de un contrato en la red conectada.
+ *
+ * Sin argumento devuelve la dirección de Hardhat local. Pasando el chain
+ * ID se devuelve la dirección cero si la wallet está en otra red, que es
+ * lo que evita que los hooks dispersen lecturas contra una red sin deploy.
+ */
+export function direccionContrato(
+    contrato: NombreContrato,
+    chainId?: number,
+): Address {
+    return direccion(contrato, chainId);
 }
+
+export const direccionEntrada = (chainId?: number) => direccionContrato("Entrada", chainId);
+export const direccionPuntos = (chainId?: number) => direccionContrato("Puntos", chainId);
+export const direccionCanje = (chainId?: number) => direccionContrato("Canje", chainId);
+export const direccionReventa = (chainId?: number) => direccionContrato("Reventa", chainId);
+export const direccionSorteo = (chainId?: number) => direccionContrato("Sorteo", chainId);

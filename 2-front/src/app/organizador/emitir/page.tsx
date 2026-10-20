@@ -1,17 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount } from "wagmi";
 
 import { Boton } from "@/components/ui/Boton";
 import { Etiqueta } from "@/components/ui/Etiqueta";
 import { Separador } from "@/components/ui/Separador";
 import { Tarjeta } from "@/components/ui/Tarjeta";
+import { AvisoRed } from "@/components/web3/AvisoRed";
+import { EstadoTransaccion } from "@/components/web3/EstadoTransaccion";
 import { ConectarBilletera } from "@/components/ConectarBilletera";
 import { SECTOR } from "@/tipos/entrada";
 import { SECTORES_ORDENADOS, NOMBRE_SECTOR } from "@/lib/sectores";
 import { direccionEntrada, ENTRADA_ABI } from "@/lib/contrato";
-import { estadoTx } from "@/lib/estadoTx";
+import { useTransaccion } from "@/lib/estadoTx";
 
 /**
  * Emisión de entradas.
@@ -19,20 +21,16 @@ import { estadoTx } from "@/lib/estadoTx";
  * UI simple: elegís sector, cargás filas y asientos como CSV
  * (ej. "A,B,C" + "1,2,3" → emite 3 entradas), y mandás la tx.
  *
- * El ABI esperado es `emitir(string[] filas, string[] asientos, uint16[] sectores)`.
- * La firma exacta está documentada en `docs/spec/entrada.md` y en los
- * tests `1-hardhat/test/Entrada.ts`.
+ * La firma es `emitir(string[] filas, string[] asientos, uint16[] sectores)`
+ * y está documentada en `docs/spec/entrada.md`.
  */
 export default function EmitirPage() {
-    const { isConnected } = useAccount();
+    const { isConnected, chainId } = useAccount();
     const [filasTxt, setFilasTxt] = useState("A,B,C");
     const [asientosTxt, setAsientosTxt] = useState("1,2,3");
     const [sector, setSector] = useState<number>(SECTOR.A);
 
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
-    const { isLoading: esperando, isSuccess: confirmado } = useWaitForTransactionReceipt({
-        hash,
-    });
+    const direccion = direccionEntrada(chainId);
 
     const filas = csvALista(filasTxt);
     const asientos = csvALista(asientosTxt);
@@ -43,6 +41,17 @@ export default function EmitirPage() {
         largoOk &&
         filas.every((f) => f !== "0") &&
         asientos.every((a) => a !== "0");
+
+    const emision = useTransaccion(
+        formValido
+            ? {
+                  address: direccion,
+                  abi: ENTRADA_ABI,
+                  functionName: "emitir",
+                  args: [filas, asientos, sectores],
+              }
+            : undefined,
+    );
 
     if (!isConnected) {
         return (
@@ -59,6 +68,7 @@ export default function EmitirPage() {
     return (
         <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
             <Header />
+            <AvisoRed />
 
             <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[2rem] border border-ink-800/60 md:grid-cols-12">
                 <div className="space-y-8 bg-ink-900 p-10 md:col-span-7">
@@ -84,17 +94,9 @@ export default function EmitirPage() {
                         bloque
                         tamano="lg"
                         variante="primario"
-                        cargando={isPending || esperando}
+                        cargando={emision.ocupada}
                         disabled={!formValido}
-                        onClick={() => {
-                            if (!largoOk) return;
-                            writeContract({
-                                address: direccionEntrada(),
-                                abi: ENTRADA_ABI,
-                                functionName: "emitir",
-                                args: [filas, asientos, sectores],
-                            });
-                        }}
+                        onClick={emision.ejecutar}
                     >
                         Emitir {filas.length} entradas
                     </Boton>
@@ -104,15 +106,8 @@ export default function EmitirPage() {
                             Filas y asientos tienen que tener el mismo largo y no ser vacíos.
                         </p>
                     )}
-                    {error && (
-                        <p className="text-xs text-red-400">{error.message.split("\n")[0]}</p>
-                    )}
-                    {hash && (
-                        <p className="font-mono text-xs text-ink-400">
-                            Tx: {hash.slice(0, 10)}…{hash.slice(-4)} ·{" "}
-                            {estadoTx(esperando, confirmado)}
-                        </p>
-                    )}
+
+                    <EstadoTransaccion transaccion={emision} />
                 </div>
 
                 <PreviewLote filas={filas} asientos={asientos} sector={sector} />

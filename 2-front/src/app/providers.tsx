@@ -8,6 +8,7 @@ import { WagmiProvider } from "wagmi";
 import { useState, type ReactNode } from "react";
 
 import { wagmiConfig } from "@/lib/wagmi";
+import { useSincronizacion } from "@/hooks/useSincronizacion";
 
 /**
  * Providers globales del cliente. RainbowKit va adentro de Wagmi, que a su
@@ -33,9 +34,21 @@ export function Providers({ children }: ProvidersProps) {
                     })}
                     modalSize="compact"
                 >
+                    <Sincronizador />
                     {children}
                 </RainbowKitProvider>
             </QueryClientProvider>
         </WagmiProvider>
     );
+}
+
+/**
+ * Monta los listeners de eventos del sistema. Va dentro de los providers
+ * para que escuche una sola vez, en vez de uno por página: así, si el
+ * portero valida una entrada desde otra pestaña, la pantalla del comprador
+ * se actualiza sin pedirle F5.
+ */
+function Sincronizador() {
+    useSincronizacion();
+    return null;
 }

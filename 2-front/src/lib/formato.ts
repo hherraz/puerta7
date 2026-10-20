@@ -10,6 +10,23 @@ export function formatoPrecio(wei: bigint | undefined): string {
     return `${eth.toFixed(4)} ETH`;
 }
 
+/**
+ * Puntos → número legible. `Puntos` es un ERC-20 con 18 decimales, pero
+ * los puntos se emiten en enteros y no son una moneda: mostrar "0.0000"
+ * cuando hay 250 sería engañoso, así que acá se recorta a 2 decimales y
+ * se saca el cero entero.
+ */
+export function formatoPuntos(cantidad: bigint | undefined): string {
+    if (cantidad === undefined) return "—";
+    if (cantidad === 0n) return "0";
+
+    const entero = cantidad / 10n ** 18n;
+    const resto = (cantidad % 10n ** 18n) / 10n ** 16n; // 2 decimales
+
+    if (resto === 0n) return entero.toString();
+    return `${entero.toString()}.${resto.toString().padStart(2, "0")}`;
+}
+
 /** Token id → "P7 #003" con padding a 3 dígitos. */
 export function formatoTokenId(id: bigint | number | undefined): string {
     if (id === undefined) return "—";
