@@ -6,8 +6,7 @@ const { ethers } = await network.create();
 // ============================================================
 // Suite Reventa — Sesión 4 (docs/spec/reventa.md)
 //
-// ESTADO: `Reventa.sol` todavía no existe. Suite desactivada con
-// `describe.skip` hasta implementar el contrato en su sesión.
+// Valida `Reventa.sol` contra la spec.
 //
 // Interfaz mínima asumida (solo lo que nombra la spec):
 //   constructor(address entrada)
@@ -77,7 +76,7 @@ async function balance(direccion: string) {
     return ethers.provider.getBalance(direccion);
 }
 
-describe.skip("Reventa [PENDIENTE: implementar Reventa.sol en sesión 4]", function () {
+describe("Reventa", function () {
     describe("configurar", function () {
         it("solo el organizador configura y emite Configurado", async function () {
             const { reventa, otro } = await desplegar();
@@ -86,7 +85,7 @@ describe.skip("Reventa [PENDIENTE: implementar Reventa.sol en sesión 4]", funct
                 .withArgs(120n, 5n);
             await expect(
                 reventa.connect(otro).configurar(120n, 5n)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
         });
     });
 

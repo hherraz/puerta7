@@ -6,10 +6,8 @@ const { ethers } = await network.create();
 // ============================================================
 // Suite Sorteo — Sesión 2 (docs/spec/sorteo.md)
 //
-// ESTADO: `Sorteo.sol` todavía no existe. Esta suite es la spec
-// ejecutable (TDD): queda desactivada con `describe.skip` hasta
-// que el contrato se implemente en su sesión. Al implementarlo,
-// sacar el `.skip` exterior y correr.
+// Valida `Sorteo.sol` contra la spec (esta suite es la spec
+// ejecutable, TDD).
 //
 // Interfaz mínima asumida (solo lo que nombra la spec):
 //   constructor(address entrada, uint256 deposito)
@@ -21,9 +19,8 @@ const { ethers } = await network.create();
 //
 // Permiso cruzado: Sorteo necesita permiso en Entrada para
 // entregar entradas a los ganadores (y nada más, dice la spec).
-// La función de designación no existe en Entrada hoy y no se
-// inventa acá: la fija la implementación de la sesión y su
-// script de despliegue debe invocarla tras desplegar Sorteo.
+// Es `Entrada.designarOperadorAutorizado(sorteo, true)`, que el
+// despliegue (helper `desplegar`) invoca tras desplegar Sorteo.
 //
 // Errores: la spec los nombra como custom errors, así que se
 // verifican con `revertedWithCustomError`. Si la implementación
@@ -59,6 +56,11 @@ async function desplegar() {
         await entrada.getAddress(),
         DEPOSITO,
     ]);
+    // Permiso cruzado: Sorteo emite la entrada de cada ganador.
+    await entrada.designarOperadorAutorizado(
+        await sorteo.getAddress(),
+        true
+    );
     return { entrada, sorteo, organizador, portero, alice, bob, caro, otro };
 }
 
@@ -106,13 +108,13 @@ async function conDosRevelados(cantidad = 2) {
     return ctx;
 }
 
-describe.skip("Sorteo [PENDIENTE: implementar Sorteo.sol en sesión 2]", function () {
+describe("Sorteo", function () {
     describe("abrirSorteo", function () {
         it("revierte si llama alguien distinto al organizador", async function () {
             const { sorteo, alice } = await desplegar();
             await expect(
                 sorteo.connect(alice).abrirSorteo(2, DURACION, DURACION)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
         });
 
         it("emite SorteoAbierto con la cantidad de entradas anunciada", async function () {
@@ -217,7 +219,7 @@ describe.skip("Sorteo [PENDIENTE: implementar Sorteo.sol en sesión 2]", functio
         it("revierte si revela quien nunca comprometió", async function () {
             const { sorteo, caro } = await conDosRevelados();
             await expect(sorteo.connect(caro).revelar(11n, SAL_A)).to.be
-                .reverted;
+                .revert(ethers);
         });
 
         it("el compromiso copiado de otro no sirve: incluye la dirección", async function () {
@@ -237,7 +239,7 @@ describe.skip("Sorteo [PENDIENTE: implementar Sorteo.sol en sesión 2]", functio
     describe("cerrar", function () {
         it("revierte si todavía no venció el plazo de revelación", async function () {
             const { sorteo } = await conDosRevelados();
-            await expect(sorteo.cerrar()).to.be.reverted;
+            await expect(sorteo.cerrar()).to.be.revert(ethers);
         });
 
         it("cualquiera puede cerrar vencido el plazo y emite SorteoCerrado", async function () {
@@ -327,7 +329,7 @@ describe.skip("Sorteo [PENDIENTE: implementar Sorteo.sol en sesión 2]", functio
             const { sorteo, caro } = await conDosRevelados(2);
             await avanzarTiempo(DURACION + 1);
             await sorteo.cerrar();
-            await expect(sorteo.connect(caro).reclamar()).to.be.reverted;
+            await expect(sorteo.connect(caro).reclamar()).to.be.revert(ethers);
         });
     });
 
@@ -343,7 +345,7 @@ describe.skip("Sorteo [PENDIENTE: implementar Sorteo.sol en sesión 2]", functio
                     .comprometer(compromisoDe(5n, SAL_C, alice.address), {
                         value: DEPOSITO,
                     })
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
             await sorteo.connect(alice).revelar(11n, SAL_A);
             await avanzarTiempo(DURACION + 1);
             await expect(sorteo.cerrar()).to.emit(sorteo, "SorteoCerrado");

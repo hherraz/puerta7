@@ -96,6 +96,12 @@ contract Entrada is ERC721, Ownable {
     /// Empieza en 0; la primera emisión produce tokenId 1.
     uint256 private _ultimoId;
 
+    /// @notice Contratos del sistema autorizados a emitir para un
+    /// titular (`emitirPara`) y a quemar (`quemar`): Sorteo entrega
+    /// la entrada del ganador y Canje quema la usada y emite la
+    /// mejora. Los designa el organizador tras el despliegue.
+    mapping(address cuenta => bool) public operadorAutorizado;
+
     // ===========================================================
     // EVENTOS
     // ===========================================================
@@ -129,6 +135,13 @@ contract Entrada is ERC721, Ownable {
         address indexed destinatario,
         uint256 monto
     );
+
+    event OperadorAutorizadoDesignado(
+        address indexed cuenta,
+        bool autorizado
+    );
+
+    event EntradaQuemada(uint256 indexed tokenId);
 
     // ===========================================================
     // ERRORES
@@ -214,6 +227,13 @@ contract Entrada is ERC721, Ownable {
     /// custom error (`OwnableUnauthorizedAccount`).
     modifier soloOrganizador() {
         if (msg.sender != owner()) revert("Solo el organizador");
+        _;
+    }
+
+    /// @dev Restringe una función a un operador autorizado del
+    /// sistema (Sorteo, Canje) designado por el organizador.
+    modifier soloOperadorAutorizado() {
+        if (!operadorAutorizado[msg.sender]) revert("No autorizado");
         _;
     }
 
@@ -405,6 +425,78 @@ contract Entrada is ERC721, Ownable {
         if (!ok) revert("Transferencia fallida");
 
         emit FondosRetirados(owner(), monto);
+    }
+
+    // ===========================================================
+    // OPERADORES DEL SISTEMA (Sorteo, Canje)
+    // ===========================================================
+    //
+    // Permisos cruzados mínimos: un operador autorizado puede
+    // emitir una entrada ya Vendida a nombre de un titular
+    // (ganador del sorteo, mejora del canje) y quemar una entrada
+    // (la usada que el canje destruye). Nada más: no puede emitir
+    // lotes a la venta, ni usar, ni retirar fondos.
+
+    /// @notice Designa (o revoca) un operador autorizado del sistema.
+    function designarOperadorAutorizado(
+        address cuenta,
+        bool autorizado
+    ) external soloOrganizador {
+        operadorAutorizado[cuenta] = autorizado;
+        emit OperadorAutorizadoDesignado(cuenta, autorizado);
+    }
+
+    /// @notice Emite una entrada en estado Vendida directamente al
+    /// `titular`. Solo un operador autorizado. No pasa por la venta
+    /// al azar: el titular ya ganó el sorteo o pagó con puntos.
+    /// @return tokenId El id de la entrada emitida.
+    function emitirPara(
+        address titular,
+        uint16 sector,
+        string memory fila,
+        string memory asiento
+    ) external soloOperadorAutorizado returns (uint256 tokenId) {
+        _validarSector(sector);
+        _validarFila(fila);
+        _validarAsiento(asiento);
+        _validarNoEmitida(sector, fila, asiento);
+
+        tokenId = ++_ultimoId;
+        _emitido[_claveAsiento(sector, fila, asiento)] = true;
+        _asiento[tokenId] = Asiento({
+            sector: sector,
+            fila: fila,
+            asiento: asiento
+        });
+        estado[tokenId] = Estado.Vendida;
+        _update(titular, tokenId, address(0));
+
+        emit EntradaEmitida(tokenId, sector, fila, asiento);
+    }
+
+    /// @notice Quema la entrada `tokenId`: deja de existir como
+    /// NFT. Solo un operador autorizado (el canje la destruye al
+    /// entregar la mejora; la suite verifica las autorizaciones
+    /// previas del titular en Canje, antes de llegar acá).
+    function quemar(uint256 tokenId) external soloOperadorAutorizado {
+        _requireOwned(tokenId);
+        delete estado[tokenId];
+        delete _asiento[tokenId];
+        _burn(tokenId);
+        emit EntradaQuemada(tokenId);
+    }
+
+    /// @notice Sector, fila y asiento de una entrada existente.
+    /// Lo consume Canje para validar que el destino sea superior
+    /// y para emitir la mejora en la misma fila y asiento.
+    function datosAsiento(uint256 tokenId)
+        external
+        view
+        returns (uint16 sector, string memory fila, string memory asiento)
+    {
+        _requireOwned(tokenId);
+        Asiento memory a = _asiento[tokenId];
+        return (a.sector, a.fila, a.asiento);
     }
 
     // ===========================================================

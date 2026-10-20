@@ -6,9 +6,8 @@ const { ethers } = await network.create();
 // ============================================================
 // Suite Canje — Sesión 3 (docs/spec/canje.md)
 //
-// ESTADO: `Canje.sol` todavía no existe (y Entrada/Puntos deben
-// darle los permisos cruzados). Suite desactivada con
-// `describe.skip` hasta implementar los contratos en su sesión.
+// Valida `Canje.sol` (con los permisos cruzados de
+// Entrada/Puntos) contra la spec.
 //
 // El test de aforo es [AMBIGUO]: la spec no dice de dónde sale
 // el aforo del destino.
@@ -20,10 +19,9 @@ const { ethers } = await network.create();
 //   canjear(uint256 tokenId, uint16 sectorDestino)
 //
 // Permisos cruzados que el despliegue debe hacer (spec, flujo):
-// Canje es quemador en Puntos y tiene permiso de quema+emisión en
-// Entrada. Esta suite designa lo que Puntos ya expone
-// (`designarQuemador`); la designación equivalente en Entrada no
-// existe todavía y NO se inventa acá: queda a la implementación.
+// Canje es quemador en Puntos (`designarQuemador`) y operador
+// autorizado en Entrada (`designarOperadorAutorizado`, que
+// habilita quema+emisión). Los hace el helper `desplegar`.
 //
 // Errores: custom errors de la spec, con `revertedWithCustomError`.
 // ============================================================
@@ -50,8 +48,13 @@ async function desplegar() {
         await entrada.getAddress(),
         await puntos.getAddress(),
     ]);
-    // Permiso cruzado 1 de 3 (los de Entrada quedan a la implementación).
+    // Permisos cruzados del despliegue: Canje quema puntos y
+    // quema/emite entradas como operador autorizado de Entrada.
     await puntos.designarQuemador(await canje.getAddress());
+    await entrada.designarOperadorAutorizado(
+        await canje.getAddress(),
+        true
+    );
     await puntos.designarEmisor(organizador.address);
     return { entrada, puntos, canje, organizador, portero, titular, otro };
 }
@@ -85,7 +88,7 @@ async function autorizar(ctx: any, puntosAutorizados = COSTO) {
         .approve(await ctx.canje.getAddress(), ctx.tokenId);
 }
 
-describe.skip("Canje [PENDIENTE: implementar Canje.sol en sesión 3]", function () {
+describe("Canje", function () {
     describe("definirCosto / consultarCosto", function () {
         it("solo el organizador define costos y emite CostoDefinido", async function () {
             const { canje, otro } = await desplegar();
@@ -94,7 +97,7 @@ describe.skip("Canje [PENDIENTE: implementar Canje.sol en sesión 3]", function 
                 .withArgs(1, 2, COSTO);
             await expect(
                 canje.connect(otro).definirCosto(1, 2, COSTO)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
         });
 
         it("consultarCosto devuelve lo definido", async function () {
@@ -117,7 +120,7 @@ describe.skip("Canje [PENDIENTE: implementar Canje.sol en sesión 3]", function 
                 SALDO - COSTO
             );
             // La usada ya no existe (invariante 3: no se canjea dos veces).
-            await expect(ctx.entrada.ownerOf(ctx.tokenId)).to.be.reverted;
+            await expect(ctx.entrada.ownerOf(ctx.tokenId)).to.be.revert(ethers);
             // Hay una entrada nueva del titular (tokenId 2, sector 2).
             expect(await ctx.entrada.ownerOf(2n)).to.equal(
                 ctx.titular.address
@@ -205,7 +208,7 @@ describe.skip("Canje [PENDIENTE: implementar Canje.sol en sesión 3]", function 
             await ctx.canje.connect(ctx.titular).canjear(ctx.tokenId, 2);
             await expect(
                 ctx.canje.connect(ctx.titular).canjear(ctx.tokenId, 2)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
         });
     });
 
@@ -217,7 +220,7 @@ describe.skip("Canje [PENDIENTE: implementar Canje.sol en sesión 3]", function 
             await entrada.emitir(["A"], ["1"], [1]);
             await expect(
                 canje.connect(titular).canjear(1n, 2)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
         });
     });
 

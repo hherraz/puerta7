@@ -6,8 +6,7 @@ const { ethers } = await network.create();
 // ============================================================
 // Suite Puntos — Sesión 3 (docs/spec/puntos.md)
 //
-// ESTADO: `Puntos.sol` todavía no existe. Suite desactivada con
-// `describe.skip` hasta implementar el contrato en su sesión.
+// Valida `Puntos.sol` contra la spec.
 //
 // Interfaz mínima asumida (solo lo que nombra la spec):
 //   constructor()  — ERC-20 de OpenZeppelin, 18 decimales
@@ -24,7 +23,7 @@ const { ethers } = await network.create();
 // (que ya impide usar dos veces la misma entrada).
 //
 // Errores: custom errors de la spec, con `revertedWithCustomError`.
-// Para el ERC-20 estándar se usa `reverted` genérico, porque OZ
+// Para el ERC-20 estándar se usa `revert(ethers)` genérico, porque OZ
 // revierte con sus propios custom errors (ERC20InsufficientBalance…).
 // ============================================================
 const E_NO_EMISOR = "NoEsEmisor";
@@ -57,7 +56,7 @@ async function conSaldo() {
     return ctx;
 }
 
-describe.skip("Puntos [PENDIENTE: implementar Puntos.sol en sesión 3]", function () {
+describe("Puntos", function () {
     describe("designarEmisor / designarQuemador", function () {
         it("solo el organizador puede designar (y emite los eventos)", async function () {
             const { puntos, emisor, quemador } = await desplegar();
@@ -171,7 +170,7 @@ describe.skip("Puntos [PENDIENTE: implementar Puntos.sol en sesión 3]", functio
             const { puntos, titular, otro } = await conSaldo();
             await expect(
                 puntos.connect(titular).transfer(otro.address, 101n)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
             expect(await puntos.balanceOf(titular.address)).to.equal(100n);
         });
 
@@ -182,7 +181,7 @@ describe.skip("Puntos [PENDIENTE: implementar Puntos.sol en sesión 3]", functio
                 puntos
                     .connect(otro)
                     .transferFrom(titular.address, otro.address, 26n)
-            ).to.be.reverted;
+            ).to.be.revert(ethers);
         });
 
         it("transferFrom descuenta lo autorizado al mover (invariante 6)", async function () {
