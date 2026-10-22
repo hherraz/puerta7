@@ -84,12 +84,31 @@ Comprueba contra el nodo que:
 
 - las direcciones exportadas responden,
 - `owner()` es la cuenta 0 y `portero()` es la cuenta 1,
-- el camino `emitir → comprar → usar` anda de punta a punta,
+- el camino `emitir → comprar (reservar y confirmar) → usar` anda de punta a punta,
 - el portero **no** puede retirar fondos,
 - una entrada ya usada **no** se puede listar en reventa.
 
 Es re-ejecutable: nombra los asientos a partir de lo ya emitido, así que
 podés correrlo las veces que quieras contra el mismo nodo.
+
+### Demo de ataques (revisión de seguridad)
+
+```bash
+cd 1-hardhat && npx hardhat run scripts/demo-ataques.ts --network localhost
+```
+
+Despliega contratos nuevos contra el nodo y reproduce los 15 hallazgos de
+`docs/informe-seguridad.pdf` (DoS del sorteo, reapertura, comisión
+cambiada a último momento, "simular y revertir", etc.). Para cada uno
+imprime si el ataque **funcionó** o quedó **bloqueado**, según lo que pasa
+en la cadena. Las salidas guardadas están en `docs/evidencia/`.
+
+**Compra en dos pasos:** `comprar()` reserva y `confirmarCompras()`
+asigna el asiento con el hash del bloque siguiente. En el nodo local los
+bloques solo se minan cuando llega una transacción: si "Recibir entrada"
+no trae nada al primer intento, tocalo de nuevo (ese primer intento hace
+avanzar la cadena). Lo mismo pasa con el cierre del sorteo, que también
+va en dos pasos.
 
 ## 6. Levantar el front
 

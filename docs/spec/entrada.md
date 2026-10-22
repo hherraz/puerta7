@@ -49,3 +49,11 @@ la reventa con techo llega en la sesión 4).
 - **Una sola compra por dirección**: no se limita en esta versión.
 - **Cambiar de portero**: no se contempla; se fija al desplegar.
 - **Precio**: se fija al desplegar y no cambia
+## Cambios tras la revisión de seguridad (octubre 2026)
+
+- **Compra en dos pasos.** `comprar()` cobra el precio exacto y reserva; `confirmarCompras(maximo)` (cualquiera puede llamarla) asigna el asiento con el hash del bloque siguiente al de la reserva, en orden de llegada. Con un solo paso, el azar era público al comprar y un contrato podía comprar y revertir hasta conseguir el asiento que quería. Si nadie confirma en 256 bloques, la reserva toma un bloque nuevo.
+- **Ventana de ingreso.** `definirVentanaIngreso(inicio, fin)` (solo organizador) acota cuándo el portero puede marcar entradas. Mitiga, no elimina, que el portero sea el oráculo del sistema.
+- **Fila y asiento solo alfanuméricos** (`[0-9A-Za-z]`), para que no se puedan inyectar campos en el JSON ni marcado en el SVG de `tokenURI`.
+- **`quemar` exige el permiso del dueño** sobre la entrada, además de ser operador autorizado.
+- **`transferencias(tokenId)`** cuenta los cambios de dueño entre personas; Reventa lo usa para invalidar listados viejos.
+- **Organizador:** `renounceOwnership` está deshabilitada (lo recaudado quedaría atrapado) y el traspaso es en dos pasos (`transferOwnership` + `acceptOwnership`).

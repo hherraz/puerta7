@@ -41,6 +41,9 @@ const MENSAJES: Record<string, string> = {
     ListadoInactivo: "Ese listado ya no está disponible.",
     NoEsVendedor: "Solo el vendedor puede cancelar el listado.",
     SinFondosParaRetirar: "No tenés fondos pendientes para retirar.",
+    ComisionInvalida: "La comisión no puede superar el 100%.",
+    RenunciaDeshabilitada:
+        "No se puede renunciar al contrato: los fondos quedarían sin dueño. Usá transferir.",
     // --- Sorteo ---
     SorteoNoAbierto: "No hay un sorteo abierto.",
     FueraDePlazoCompromiso: "Se venció el plazo para comprometer postulaciones.",
@@ -52,6 +55,13 @@ const MENSAJES: Record<string, string> = {
     DepositoInsuficiente: "El depósito es menor al requerido.",
     SorteoNoCerrado: "El sorteo todavía no está cerrado.",
     NoRevelo: "No revelaste tu postulación, así que no hay nada que reclamar.",
+    SorteoYaAbierto: "Este contrato ya hizo su sorteo: no se puede reabrir.",
+    DepositoExcedido: "Mandaste más que el depósito: tiene que ser exacto.",
+    DemasiadasEntradas: "Son demasiadas entradas para un sorteo (máximo 500).",
+    // --- Ownable2Step (todos los contratos) ---
+    OwnableUnauthorizedAccount: "Solo el organizador puede hacer esto.",
+    // --- ERC-721 (Entrada) ---
+    ERC721InsufficientApproval: "Falta el permiso del dueño sobre esa entrada.",
 };
 
 /**

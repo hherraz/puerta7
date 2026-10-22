@@ -17,6 +17,7 @@ pragma solidity ^0.8.28;
  * ================================================================ */
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 interface IEntradaReventa {
     function precio() external view returns (uint256);
@@ -28,9 +29,10 @@ interface IEntradaReventa {
         address operador
     ) external view returns (bool);
     function transferFrom(address from, address to, uint256 tokenId) external;
+    function transferencias(uint256 tokenId) external view returns (uint256);
 }
 
-contract Reventa is Ownable {
+contract Reventa is Ownable2Step {
     // Valor de `Entrada.Estado.Usada`.
     uint8 private constant USADA = 3;
 
@@ -38,6 +40,14 @@ contract Reventa is Ownable {
         uint256 tokenId;
         address vendedor;
         uint256 precio;
+        // Fijada al listar: es la que el vendedor aceptó. Si se leyera
+        // al comprar, el organizador podría subirla justo antes de una
+        // compra y quedarse con el pago del vendedor.
+        uint256 comisionPorcentaje;
+        // Cambios de dueño de la entrada al listarse. Si después cambia,
+        // el listado deja de valer: si la entrada se fue y volvió al
+        // vendedor, el listado viejo no revive al precio viejo.
+        uint256 transferencias;
         bool activo;
     }
 
@@ -73,15 +83,25 @@ contract Reventa is Ownable {
     error PagoIncorrecto();
     error SinFondosParaRetirar();
     error AutorizacionInsuficiente();
+    error ComisionInvalida();
+    error RenunciaDeshabilitada();
 
     constructor(address entrada_) Ownable(msg.sender) {
         entrada = IEntradaReventa(entrada_);
+    }
+
+    /// @notice Deshabilitada: la comisión se acredita a `owner()` y, sin
+    /// organizador, quedaría atrapada para siempre (invariante 8).
+    function renounceOwnership() public pure override {
+        revert RenunciaDeshabilitada();
     }
 
     function configurar(
         uint256 techoPorcentaje_,
         uint256 comisionPorcentaje_
     ) external onlyOwner {
+        // Más del 100% haría revertir por underflow toda compra.
+        if (comisionPorcentaje_ > 100) revert ComisionInvalida();
         techoPorcentaje = techoPorcentaje_;
         comisionPorcentaje = comisionPorcentaje_;
         emit Configurado(techoPorcentaje, comisionPorcentaje);
@@ -103,6 +123,8 @@ contract Reventa is Ownable {
             tokenId: tokenId,
             vendedor: msg.sender,
             precio: precio,
+            comisionPorcentaje: comisionPorcentaje,
+            transferencias: entrada.transferencias(tokenId),
             activo: true
         });
         emit Listado(idListado, tokenId, msg.sender, precio);
@@ -115,13 +137,14 @@ contract Reventa is Ownable {
         // invalida el listado.
         if (
             entrada.estado(listado.tokenId) == USADA ||
-            entrada.ownerOf(listado.tokenId) != listado.vendedor
+            entrada.ownerOf(listado.tokenId) != listado.vendedor ||
+            entrada.transferencias(listado.tokenId) != listado.transferencias
         ) revert ListadoInactivo();
         if (msg.value != listado.precio) revert PagoIncorrecto();
 
         // Effects antes que interactions (anti-reentrada).
         listado.activo = false;
-        uint256 comision = (listado.precio * comisionPorcentaje) / 100;
+        uint256 comision = (listado.precio * listado.comisionPorcentaje) / 100;
         _retirable[listado.vendedor] += listado.precio - comision;
         _retirable[owner()] += comision;
 

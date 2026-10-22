@@ -16,8 +16,9 @@ pragma solidity ^0.8.28;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-contract Puntos is ERC20, Ownable {
+contract Puntos is ERC20, Ownable2Step {
     /// @notice Único autorizado a emitir (en el sistema, Entrada).
     address public emisor;
 

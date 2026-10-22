@@ -88,6 +88,14 @@ Prioridad por antigüedad, cercanía geográfica o cualquier criterio distinto d
 
 Lista de espera para las entradas que nadie reclama.
 
+## Cambios tras la revisión de seguridad (octubre 2026)
+
+- **Cierre en dos pasos.** El primer `cerrar()` fija `bloqueSorteo` (el bloque siguiente); el segundo, ya minado ese bloque, combina su hash con lo revelado y sortea. Así el resultado no se puede calcular antes de que termine la revelación (invariante 8): el último en revelar decide sin conocer ese hash. Si nadie completa el cierre en 256 bloques, se fija un bloque nuevo.
+- **Selección de ganadores con Fisher-Yates parcial.** El costo de cerrar depende de las entradas anunciadas, no de cuántos se postulan: antes un sorteo popular (o inflado con direcciones falsas) no se podía cerrar y los depósitos quedaban atrapados.
+- **Un solo sorteo por contrato** (`SorteoYaAbierto`) y **tope de 500 entradas** (`DemasiadasEntradas`), para que el cierre siempre entre en un bloque.
+- **Depósito exacto** (`DepositoExcedido`): `reclamar` devuelve exactamente el depósito.
+- **`retirar()`** (solo organizador, después del cierre): retira los depósitos que no se devuelven (ganadores y quienes no revelaron). Lo que se les debe a los perdedores queda reservado. `renounceOwnership` está deshabilitada y el traspaso de organizador es en dos pasos.
+
 ## [SOLO INSTRUCTOR]
 
 ### Los dos huecos deliberados

@@ -67,6 +67,11 @@ Puntos diferenciados por tipo de evento.
 
 Mercado de puntos.
 
+## Cambios tras la revisión de seguridad (octubre 2026)
+
+- El traspaso de organizador es en dos pasos (`transferOwnership` + `acceptOwnership`).
+- El hueco del oráculo sigue abierto por diseño: se mitiga en `Entrada` con una ventana de ingreso para el portero.
+
 ## [SOLO INSTRUCTOR]
 
 ### El hueco deliberado

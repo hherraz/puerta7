@@ -1,8 +1,8 @@
 "use client";
 
 import { useAccount, useReadContracts } from "wagmi";
-import { useState } from "react";
-import { encodePacked, keccak256 } from "viem";
+import { useEffect, useState } from "react";
+import { encodePacked, keccak256, toHex } from "viem";
 
 import { Boton } from "@/components/ui/Boton";
 import { Etiqueta } from "@/components/ui/Etiqueta";
@@ -42,6 +42,7 @@ export default function SorteoPage() {
             { address: sorteo, abi: SORTEO_ABI, functionName: "finRevelacion" },
             { address: sorteo, abi: SORTEO_ABI, functionName: "cantidadEntradas" },
             { address: sorteo, abi: SORTEO_ABI, functionName: "deposito" },
+            { address: sorteo, abi: SORTEO_ABI, functionName: "bloqueSorteo" },
         ],
     });
 
@@ -51,6 +52,7 @@ export default function SorteoPage() {
     const finRevelacion = estado?.[3]?.result as bigint | undefined;
     const entradasEnJuego = estado?.[4]?.result as bigint | undefined;
     const deposito = estado?.[5]?.result as bigint | undefined;
+    const bloqueSorteo = estado?.[6]?.result as bigint | undefined;
 
     if (!isConnected) {
         return (
@@ -86,7 +88,9 @@ export default function SorteoPage() {
                 <div className="space-y-8 bg-ink-900 p-10">
                     <PanelAbrir />
                     <Separador />
-                    <PanelCerrar />
+                    <PanelCerrar bloqueSorteo={bloqueSorteo} />
+                    <Separador />
+                    <PanelRetirar />
                 </div>
 
                 <div className="space-y-8 bg-ink-950 p-10">
@@ -166,8 +170,13 @@ function PanelAbrir() {
     );
 }
 
-/** `cerrar()` no es del organizador: cualquiera puede gatillarlo. */
-function PanelCerrar() {
+/**
+ * `cerrar()` no es del organizador: cualquiera puede gatillarlo. Va en dos
+ * llamadas: la primera fija un bloque futuro y la segunda, minado ese
+ * bloque, suma su hash a la entropía y sortea. Así el último en revelar no
+ * puede calcular el resultado antes de decidir si revela.
+ */
+function PanelCerrar({ bloqueSorteo }: { readonly bloqueSorteo: bigint | undefined }) {
     const { chainId } = useAccount();
     const sorteo = direccionSorteo(chainId);
 
@@ -177,13 +186,15 @@ function PanelCerrar() {
         functionName: "cerrar",
     });
 
+    const pidioBloque = bloqueSorteo !== undefined && bloqueSorteo > 0n;
+
     return (
         <>
             <Etiqueta>Cerrar el sorteo</Etiqueta>
             <p className="text-xs text-ink-500">
-                Se puede llamar por cualquiera, pero solo después de que venza el
-                plazo de revelación. Calcula la entropía final y determina los
-                ganadores.
+                {pidioBloque
+                    ? `Bloque del sorteo: ${bloqueSorteo.toString()}. Cuando se mine, su hash se suma a la entropía y salen los ganadores. Si no pasa nada, ese bloque todavía no existe: volvé a tocar en unos segundos.`
+                    : "Cualquiera puede llamarlo, después de que venza el plazo de revelación. Primero se fija un bloque futuro; después su hash se combina con lo revelado para calcular los ganadores."}
             </p>
             <Boton
                 bloque
@@ -192,9 +203,42 @@ function PanelCerrar() {
                 cargando={cerrar.ocupada}
                 onClick={cerrar.ejecutar}
             >
-                Calcular ganadores
+                {pidioBloque ? "Calcular ganadores" : "Fijar el bloque del sorteo"}
             </Boton>
             <EstadoTransaccion transaccion={cerrar} />
+        </>
+    );
+}
+
+/** Solo el organizador: lo que no se devuelve (ganadores y quienes no revelaron). */
+function PanelRetirar() {
+    const { chainId } = useAccount();
+    const sorteo = direccionSorteo(chainId);
+
+    const retirar = useTransaccion({
+        address: sorteo,
+        abi: SORTEO_ABI,
+        functionName: "retirar",
+    });
+
+    return (
+        <>
+            <Etiqueta>Retirar lo recaudado</Etiqueta>
+            <p className="text-xs text-ink-500">
+                Solo el organizador, después del cierre. Retira los depósitos de los
+                ganadores y de quienes no revelaron; lo que se les debe a los
+                perdedores queda reservado hasta que lo reclamen.
+            </p>
+            <Boton
+                bloque
+                variante="secundario"
+                tamano="md"
+                cargando={retirar.ocupada}
+                onClick={retirar.ejecutar}
+            >
+                Retirar
+            </Boton>
+            <EstadoTransaccion transaccion={retirar} />
         </>
     );
 }
@@ -219,6 +263,39 @@ function PanelPostular({
 
     const [valor, setValor] = useState("");
     const [salt, setSalt] = useState("");
+
+    // Valor y salt se guardan en este navegador hasta revelar: si se
+    // perdieran (por ejemplo, al recargar), no se podría revelar y se
+    // perdería el depósito.
+    const clave = address !== undefined ? `puerta7:sorteo:${sorteo}:${address}` : undefined;
+    useEffect(() => {
+        if (clave === undefined) return;
+        try {
+            const guardado = localStorage.getItem(clave);
+            if (guardado === null) return;
+            const datos = JSON.parse(guardado) as { valor?: string; salt?: string };
+            setValor(datos.valor ?? "");
+            setSalt(datos.salt ?? "");
+        } catch {
+            // Sin almacenamiento disponible: se sigue sin recordar.
+        }
+    }, [clave]);
+    useEffect(() => {
+        if (clave === undefined || (valor === "" && salt === "")) return;
+        try {
+            localStorage.setItem(clave, JSON.stringify({ valor, salt }));
+        } catch {
+            // Sin almacenamiento disponible: se sigue sin recordar.
+        }
+    }, [clave, valor, salt]);
+
+    // Azar del navegador (criptográfico), no algo tipeado a mano: un salt
+    // fácil de adivinar dejaría descubrir el valor antes de tiempo.
+    function generarAlAzar() {
+        const [valorAzar = 0n] = crypto.getRandomValues(new BigUint64Array(1));
+        setValor(valorAzar.toString());
+        setSalt(toHex(crypto.getRandomValues(new Uint8Array(32))));
+    }
 
     const { eventos: comprometidos } = useEventos(sorteo, SORTEO_ABI, "PostulacionComprometida");
     const { eventos: revelados } = useEventos(sorteo, SORTEO_ABI, "PostulacionRevelada");
@@ -286,6 +363,15 @@ function PanelPostular({
                 onChange={setSalt}
                 placeholder="0x…"
             />
+            {!yaComprometio && (
+                <Boton bloque variante="secundario" tamano="md" onClick={generarAlAzar}>
+                    Generar valor y salt al azar
+                </Boton>
+            )}
+            <p className="text-xs text-ink-600">
+                Se guardan en este navegador hasta que revelás. Sin ellos no podés
+                revelar y perdés el depósito.
+            </p>
 
             <Boton
                 bloque

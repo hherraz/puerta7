@@ -77,6 +77,13 @@ Listados con vencimiento automático.
 
 Reventa de entradas ya usadas con fines de coleccionismo.
 
+## Cambios tras la revisión de seguridad (octubre 2026)
+
+- **La comisión se fija al listar**: es la que aceptó el vendedor. Cambiar la configuración después solo afecta a listados nuevos, y no puede superar el 100% (`ComisionInvalida`).
+- **Un listado deja de valer si la entrada cambió de dueño** después de listarse (aunque vuelva al vendedor).
+- **Organizador:** `renounceOwnership` está deshabilitada (las comisiones se acreditan a `owner()` y quedarían atrapadas, invariante 8) y el traspaso es en dos pasos.
+- Siguen sin arreglo dentro del contrato, por diseño: pagar la diferencia por fuera de la cadena y el front-running entre compradores.
+
 ## [SOLO INSTRUCTOR]
 
 ### Los tres ataques del bloque
