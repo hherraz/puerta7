@@ -35,6 +35,9 @@ const E_YA_USADA        = "Entrada ya usada";
 const E_SIN_FONDOS      = "Nada que retirar";
 const E_PORTERO_INV     = "Portero invalido";
 const E_PRECIO_INV      = "Precio invalido";
+const E_RENUNCIA        = "Renuncia deshabilitada";
+const E_FUERA_HORARIO   = "Fuera del horario de ingreso";
+const E_VENTANA_INV     = "Ventana invalida";
 
 // ============================================================
 // Helpers
@@ -48,6 +51,14 @@ async function desplegar() {
     return { entrada, organizador, portero, comprador, otro };
 }
 
+/** Compra completa en dos pasos: paga y reserva, deja pasar el bloque cuyo
+ *  hash va a elegir el asiento, y confirma. */
+async function comprarEntrada(entrada: any, comprador: any) {
+    await entrada.connect(comprador).comprar({ value: PRECIO });
+    await ethers.provider.send("evm_mine", []);
+    await entrada.connect(comprador).confirmarCompras(10);
+}
+
 /** Despliegue + 3 entradas Emitidas en sectores 1, 2, 3 */
 async function conTresEmitidas() {
     const ctx = await desplegar();
@@ -59,7 +70,7 @@ async function conTresEmitidas() {
 async function conUnaVendida() {
     const ctx = await desplegar();
     await ctx.entrada.emitir(FILAS, ASIENTOS.slice(0, 1), [1]);
-    await ctx.entrada.connect(ctx.comprador).comprar({ value: PRECIO });
+    await comprarEntrada(ctx.entrada, ctx.comprador);
     return ctx;
 }
 
@@ -177,6 +188,18 @@ describe("Entrada", function () {
                 const { entrada } = await desplegar();
                 await entrada.emitir(["AB", "C12", "Z9"], ["9A", "10B", "0X"], [1, 2, 3]);
                 expect(await entrada.emitidas()).to.equal(3n);
+            });
+
+            it("revierte si la fila o el asiento traen caracteres no alfanumericos (inyeccion en tokenURI)", async function () {
+                const { entrada } = await desplegar();
+                // Una comilla cierra el string del JSON y permite inyectar
+                // campos ("image" propio); un "<" inyecta marcado en el SVG.
+                await expect(
+                    entrada.emitir(['A","image":"https://x'], ["1"], [1])
+                ).to.be.revertedWith(E_FILA);
+                await expect(
+                    entrada.emitir(["A"], ["1</text><script>"], [1])
+                ).to.be.revertedWith(E_ASIENTO);
             });
 
             it("revierte si los arrays tienen longitudes distintas", async function () {
@@ -297,9 +320,9 @@ describe("Entrada", function () {
 
             it("revierte una vez agotadas las existentes", async function () {
                 const { entrada, comprador } = await conTresEmitidas();
-                await entrada.connect(comprador).comprar({ value: PRECIO });
-                await entrada.connect(comprador).comprar({ value: PRECIO });
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
+                await comprarEntrada(entrada, comprador);
+                await comprarEntrada(entrada, comprador);
                 await expect(
                     entrada.connect(comprador).comprar({ value: PRECIO })
                 ).to.be.revertedWith(E_STOCK);
@@ -312,7 +335,7 @@ describe("Entrada", function () {
                 const balanceAntes = await entrada.balanceOf(comprador.address);
                 const disponiblesAntes = await entrada.disponibles();
 
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
 
                 expect(await entrada.balanceOf(comprador.address)).to.equal(balanceAntes + 1n);
                 expect(await entrada.disponibles()).to.equal(disponiblesAntes - 1n);
@@ -325,24 +348,30 @@ describe("Entrada", function () {
                 const { entrada, organizador, comprador } = await conTresEmitidas();
                 const orgAntes = await ethers.provider.getBalance(organizador.address);
 
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
 
                 expect(await ethers.provider.getBalance(await entrada.getAddress())).to.equal(PRECIO);
                 expect(await ethers.provider.getBalance(organizador.address)).to.equal(orgAntes);
             });
 
-            it("emite el evento EntradaComprada con tokenId, comprador y precio", async function () {
+            it("emite CompraReservada al pagar y EntradaComprada al confirmar", async function () {
                 const { entrada, comprador } = await conTresEmitidas();
                 await expect(
                     entrada.connect(comprador).comprar({ value: PRECIO })
+                )
+                    .to.emit(entrada, "CompraReservada")
+                    .withArgs(1n, comprador.address);
+                await ethers.provider.send("evm_mine", []);
+                await expect(
+                    entrada.connect(comprador).confirmarCompras(10)
                 ).to.emit(entrada, "EntradaComprada");
             });
 
             it("permite que un mismo comprador compre varias entradas (sin limite por direccion)", async function () {
                 const { entrada, comprador } = await conTresEmitidas();
-                await entrada.connect(comprador).comprar({ value: PRECIO });
-                await entrada.connect(comprador).comprar({ value: PRECIO });
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
+                await comprarEntrada(entrada, comprador);
+                await comprarEntrada(entrada, comprador);
                 expect(await entrada.balanceOf(comprador.address)).to.equal(3n);
                 expect(await entrada.disponibles()).to.equal(0n);
             });
@@ -352,6 +381,89 @@ describe("Entrada", function () {
                 // La funcion existe y no recibe parametros de asiento
                 expect(entrada.comprar.length).to.equal(0);
             });
+        });
+
+        describe("azar de un bloque futuro (N1: simular y revertir)", function () {
+            it("pagar solo reserva: el asiento se asigna recien cuando existe el hash del bloque siguiente", async function () {
+                const { entrada, comprador } = await conTresEmitidas();
+                await entrada.connect(comprador).comprar({ value: PRECIO });
+                // Pago y stock reservados, pero todavia sin entrada.
+                expect(await entrada.balanceOf(comprador.address)).to.equal(0n);
+                expect(await entrada.disponibles()).to.equal(2n);
+                // En el bloque siguiente su hash todavia no existe: no hay nada que confirmar.
+                await entrada.connect(comprador).confirmarCompras(10);
+                expect(await entrada.balanceOf(comprador.address)).to.equal(0n);
+                // Un bloque mas tarde ya se puede asignar.
+                await entrada.connect(comprador).confirmarCompras(10);
+                expect(await entrada.balanceOf(comprador.address)).to.equal(1n);
+            });
+
+            it("un contrato atacante no puede comprar y revertir hasta conseguir el asiento que quiere", async function () {
+                const { entrada } = await conTresEmitidas();
+                const atacante: any = await ethers.deployContract("AtacanteCompra", [
+                    await entrada.getAddress(),
+                ]);
+                // Diez intentos, en bloques distintos, de quedarse con la entrada 3.
+                let consiguio = false;
+                for (let intento = 0; intento < 10 && !consiguio; intento++) {
+                    try {
+                        await atacante.atacar(3n, { value: PRECIO });
+                        consiguio = true;
+                    } catch {
+                        await ethers.provider.send("evm_mine", []);
+                    }
+                }
+                expect(consiguio).to.equal(false);
+                expect(await entrada.ownerOf(3n)).to.equal(await entrada.getAddress());
+            });
+
+            it("el asiento sale del hash del bloque siguiente a la reserva: no depende de quien ni cuando confirma", async function () {
+                const { entrada, comprador, otro } = await conTresEmitidas();
+                const tx = await entrada.connect(comprador).comprar({ value: PRECIO });
+                const bloque = (await tx.wait())!.blockNumber;
+                // Confirma otra cuenta, varios bloques despues.
+                for (let i = 0; i < 5; i++) await ethers.provider.send("evm_mine", []);
+                await entrada.connect(otro).confirmarCompras(10);
+                const semilla = (await ethers.provider.getBlock(bloque + 1))!.hash!;
+                const indice =
+                    BigInt(ethers.solidityPackedKeccak256(["bytes32", "uint256"], [semilla, 1n])) % 3n;
+                const esperado = [1n, 2n, 3n][Number(indice)];
+                expect(await entrada.ownerOf(esperado)).to.equal(comprador.address);
+            });
+        });
+    });
+
+    /* ------------------------------------------------------------
+     *  confirmarCompras — cualquiera, en orden de llegada
+     * ------------------------------------------------------------ */
+    describe("confirmarCompras", function () {
+        it("cualquiera puede confirmar y las reservas se procesan en orden de llegada", async function () {
+            const { entrada, comprador, otro } = await conTresEmitidas();
+            await entrada.connect(comprador).comprar({ value: PRECIO });
+            await expect(entrada.connect(otro).comprar({ value: PRECIO }))
+                .to.emit(entrada, "CompraReservada")
+                .withArgs(2n, otro.address);
+            await ethers.provider.send("evm_mine", []);
+            // Maximo 1: solo la primera reserva, aunque confirme el segundo.
+            await entrada.connect(otro).confirmarCompras(1);
+            expect(await entrada.balanceOf(comprador.address)).to.equal(1n);
+            expect(await entrada.balanceOf(otro.address)).to.equal(0n);
+            await entrada.connect(otro).confirmarCompras(1);
+            expect(await entrada.balanceOf(otro.address)).to.equal(1n);
+        });
+
+        it("si nadie confirma en 256 bloques, la reserva se reprograma con un bloque nuevo", async function () {
+            // El EVM solo recuerda el hash de los ultimos 256 bloques.
+            const { entrada, comprador } = await conTresEmitidas();
+            await entrada.connect(comprador).comprar({ value: PRECIO });
+            await ethers.provider.send("hardhat_mine", ["0x104"]); // 260 bloques
+            await expect(entrada.confirmarCompras(10))
+                .to.emit(entrada, "CompraReprogramada")
+                .withArgs(1n);
+            expect(await entrada.balanceOf(comprador.address)).to.equal(0n);
+            await ethers.provider.send("evm_mine", []);
+            await entrada.confirmarCompras(10);
+            expect(await entrada.balanceOf(comprador.address)).to.equal(1n);
         });
     });
 
@@ -411,6 +523,47 @@ describe("Entrada", function () {
                     .withArgs(tokenId, comprador.address);
             });
         });
+
+        describe("ventana de ingreso (N3: el portero como oraculo)", function () {
+            it("con ventana definida, el portero solo marca durante el horario del evento", async function () {
+                const { entrada, portero, comprador } = await conTresEmitidas();
+                await comprarEntrada(entrada, comprador);
+                await comprarEntrada(entrada, comprador);
+                const suyas: bigint[] = [];
+                for (let id = 1n; id <= 3n; id++) {
+                    if ((await entrada.ownerOf(id)) === comprador.address) suyas.push(id);
+                }
+                const ahora = (await ethers.provider.getBlock("latest"))!.timestamp;
+                await entrada.definirVentanaIngreso(ahora + 3600, ahora + 7200);
+                // El dia antes, "desde su casa": no pasa.
+                await expect(entrada.connect(portero).usar(suyas[0])).to.be.revertedWith(E_FUERA_HORARIO);
+                // Durante el evento: si.
+                await ethers.provider.send("evm_increaseTime", [3600]);
+                await ethers.provider.send("evm_mine", []);
+                await entrada.connect(portero).usar(suyas[0]);
+                expect(await entrada.estado(suyas[0])).to.equal(USADA);
+                // Terminado el evento: tampoco.
+                await ethers.provider.send("evm_increaseTime", [3601]);
+                await ethers.provider.send("evm_mine", []);
+                await expect(entrada.connect(portero).usar(suyas[1])).to.be.revertedWith(E_FUERA_HORARIO);
+            });
+        });
+    });
+
+    /* ------------------------------------------------------------
+     *  definirVentanaIngreso — solo el organizador
+     * ------------------------------------------------------------ */
+    describe("definirVentanaIngreso", function () {
+        it("solo el organizador la define, rechaza inicio >= fin y emite VentanaIngresoDefinida", async function () {
+            const { entrada, portero } = await desplegar();
+            await expect(
+                entrada.connect(portero).definirVentanaIngreso(1n, 2n)
+            ).to.be.revertedWith(E_NO_ORG);
+            await expect(entrada.definirVentanaIngreso(2n, 2n)).to.be.revertedWith(E_VENTANA_INV);
+            await expect(entrada.definirVentanaIngreso(1n, 2n))
+                .to.emit(entrada, "VentanaIngresoDefinida")
+                .withArgs(1n, 2n);
+        });
     });
 
     /* ------------------------------------------------------------
@@ -440,8 +593,8 @@ describe("Entrada", function () {
         describe("happy path", function () {
             it("transfiere todo el Ether acumulado al organizador", async function () {
                 const { entrada, organizador, comprador } = await conTresEmitidas();
-                await entrada.connect(comprador).comprar({ value: PRECIO });
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
+                await comprarEntrada(entrada, comprador);
 
                 const orgAntes = await ethers.provider.getBalance(organizador.address);
                 const tx = await entrada.connect(organizador).retirar();
@@ -465,12 +618,58 @@ describe("Entrada", function () {
 
             it("permite retirar varias veces (acumulando compras entre retiradas)", async function () {
                 const { entrada, organizador, comprador } = await conTresEmitidas();
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
                 await entrada.connect(organizador).retirar();
-                await entrada.connect(comprador).comprar({ value: PRECIO });
+                await comprarEntrada(entrada, comprador);
                 await entrada.connect(organizador).retirar();
                 expect(await ethers.provider.getBalance(await entrada.getAddress())).to.equal(0n);
             });
+        });
+    });
+
+    /* ------------------------------------------------------------
+     *  renounceOwnership — heredada de Ownable, deshabilitada
+     * ------------------------------------------------------------ */
+    describe("renounceOwnership", function () {
+        it("revierte: sin organizador lo recaudado quedaria atrapado para siempre", async function () {
+            const { entrada, organizador } = await conUnaVendida();
+            await expect(entrada.renounceOwnership()).to.be.revertedWith(E_RENUNCIA);
+            // el organizador sigue pudiendo retirar
+            expect(await entrada.owner()).to.equal(organizador.address);
+            await entrada.retirar();
+        });
+    });
+
+    /* ------------------------------------------------------------
+     *  transferOwnership — en dos pasos (Ownable2Step)
+     * ------------------------------------------------------------ */
+    describe("transferOwnership", function () {
+        it("el traspaso necesita que el nuevo organizador lo acepte (un error de tipeo no pierde el control)", async function () {
+            const { entrada, organizador, otro } = await desplegar();
+            await entrada.transferOwnership(otro.address);
+            // Hasta que acepte, sigue mandando el organizador actual.
+            expect(await entrada.owner()).to.equal(organizador.address);
+            expect(await entrada.pendingOwner()).to.equal(otro.address);
+            await entrada.connect(otro).acceptOwnership();
+            expect(await entrada.owner()).to.equal(otro.address);
+        });
+    });
+
+    /* ------------------------------------------------------------
+     *  quemar — operador autorizado, con permiso del dueño
+     * ------------------------------------------------------------ */
+    describe("quemar", function () {
+        it("un operador no puede quemar una entrada sin permiso de su dueño", async function () {
+            const { entrada, comprador, otro } = await conUnaVendida();
+            const tokenId = await primerTokenDe(entrada, comprador.address);
+            await entrada.designarOperadorAutorizado(otro.address, true);
+            await expect(
+                entrada.connect(otro).quemar(tokenId)
+            ).to.be.revertedWithCustomError(entrada, "ERC721InsufficientApproval");
+            await entrada.connect(comprador).approve(otro.address, tokenId);
+            await expect(entrada.connect(otro).quemar(tokenId))
+                .to.emit(entrada, "EntradaQuemada")
+                .withArgs(tokenId);
         });
     });
 
@@ -526,6 +725,16 @@ describe("Entrada", function () {
 
             expect(await entrada.ownerOf(tokenId)).to.equal(otro.address);
             expect(await entrada.estado(tokenId)).to.equal(USADA);
+        });
+
+        it("cuenta los cambios de dueño entre personas (Reventa lo usa para invalidar listados viejos)", async function () {
+            const { entrada, comprador, otro } = await conUnaVendida();
+            const tokenId = await primerTokenDe(entrada, comprador.address);
+            // La primera venta (del contrato al comprador) no cuenta.
+            expect(await entrada.transferencias(tokenId)).to.equal(0n);
+            await entrada.connect(comprador).transferFrom(comprador.address, otro.address, tokenId);
+            await entrada.connect(otro).transferFrom(otro.address, comprador.address, tokenId);
+            expect(await entrada.transferencias(tokenId)).to.equal(2n);
         });
     });
 

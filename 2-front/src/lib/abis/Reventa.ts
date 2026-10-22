@@ -27,6 +27,11 @@ export const REVENTA_ABI = [
     },
     {
         "inputs": [],
+        "name": "ComisionInvalida",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "EntradaUsada",
         "type": "error"
     },
@@ -75,6 +80,11 @@ export const REVENTA_ABI = [
     {
         "inputs": [],
         "name": "PrecioSobreTecho",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "RenunciaDeshabilitada",
         "type": "error"
     },
     {
@@ -192,6 +202,25 @@ export const REVENTA_ABI = [
                 "type": "address"
             }
         ],
+        "name": "OwnershipTransferStarted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
         "name": "OwnershipTransferred",
         "type": "event"
     },
@@ -213,6 +242,13 @@ export const REVENTA_ABI = [
         ],
         "name": "Retirado",
         "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "acceptOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     },
     {
         "inputs": [
@@ -317,9 +353,22 @@ export const REVENTA_ABI = [
     },
     {
         "inputs": [],
+        "name": "pendingOwner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "renounceOwnership",
         "outputs": [],
-        "stateMutability": "nonpayable",
+        "stateMutability": "pure",
         "type": "function"
     },
     {

@@ -1,0 +1,63 @@
+# Demo de ataques contra el código TAL COMO SE SUBIÓ (commit fb59636, sin correcciones), en el nodo local (Hardhat, chain 31337)
+# Comando: DEMO_VERSION="ANTES (fb59636)" npx hardhat run scripts/demo-ataques.ts --network localhost   (en una copia del repo en fb59636)
+
+════════════════════════════════════════════════════════════════════
+ DEMO DE ATAQUES — versión: ANTES (código subido, fb59636)
+ Red: chain 31337 · bloque inicial 356
+ Fecha: 2026-10-22T14:03:28.165Z
+════════════════════════════════════════════════════════════════════
+[F1] DoS del cierre del sorteo: ¿encarecen el cierre los postulantes extra?
+     gas de cerrar() con  3 postulantes y 1 entrada: 101030
+     gas de cerrar() con 18 postulantes y 1 entrada: 205030
+     diferencia: 104000 gas
+     → ✘ VULNERABLE: cada postulante encarece el cierre; inflando la lista se supera el límite del bloque y los depósitos quedan atrapados
+[F2] El organizador intenta reabrir un sorteo ya cerrado (para volver a sortear)
+     abrirSorteo() aceptado; cerrado() = false
+     → ✘ VULNERABLE: el sorteo se reabre y se puede volver a sortear hasta que gane quien uno quiere
+[F3] El organizador sube la comisión al 100% justo antes de una compra en reventa
+     la vendedora lista a 0.1 ETH con comisión 10% (espera cobrar 0.09 ETH)
+     la vendedora no tiene nada para retirar (SinFondosParaRetirar())
+     → ✘ VULNERABLE: la vendedora cobró 0: el organizador se quedó con todo el pago
+[F4] Se llama a renounceOwnership() en Entrada con plata recaudada
+     owner() = 0x0000000000000000000000000000000000000000
+     retirar(): revirtió (Solo el organizador)
+     saldo del contrato: 0.1 ETH
+     → ✘ VULNERABLE: el contrato quedó sin dueño y la recaudación atrapada para siempre
+[F5] Un postulante manda el doble del depósito al sorteo
+     aceptado: 0.02 ETH, pero reclamar() devuelve 0.01 ETH
+     → ✘ VULNERABLE: el excedente queda atrapado en el contrato
+[F6] Se emite una entrada con una fila que trae JSON
+     emitida; la metadata trae 2 campos "image": {"name":"Entrada 1-A","image":"https://sitio-falso.com/x.png-1","description":"Entrada NFT…
+     → ✘ VULNERABLE: quien emite puede meter campos en el JSON (o marcado en el SVG) del NFT
+[N1] Un contrato atacante compra y revierte hasta conseguir la entrada #3
+     consiguió la entrada #3 en el intento 3 (los fallidos solo le costaron gas)
+     → ✘ VULNERABLE: el comprador elige su asiento revirtiendo las compras que no le gustan
+[N2] El último en revelar calcula el resultado ANTES de que cierre el sorteo
+     predicción (solo con lo revelado): 0x91afe948ee002b31…
+     entropía final real:               0x91afe948ee002b31…
+     → ✘ VULNERABLE: el resultado se puede calcular con lo revelado: el último decide si revela según le convenga
+[R1] Depósitos de ganadores y de quienes no revelan, después del cierre
+     saldo que queda en el contrato: 0.02 ETH (no existe ninguna función para sacarlo)
+     → ✘ VULNERABLE: esa plata no la puede retirar nadie, nunca
+[R2] Se abre un sorteo de 100.000 entradas (imposible de cerrar en un bloque)
+     aceptado
+     → ✘ VULNERABLE: un sorteo así no se puede cerrar nunca si se anotan más que las entradas
+[R3] El organizador transfiere el contrato a una dirección mal tipeada
+     owner() después del traspaso: 0xBa9616E7D501C4E91793E60a47Bf85C19eBf3Fd9 (la dirección tipeada)
+     → ✘ VULNERABLE: el control pasó a una dirección que nadie maneja
+[R4] Un operador autorizado (con un bug o malicioso) quema la entrada de alguien
+     quemó la entrada #1 de Alice sin su permiso
+     → ✘ VULNERABLE: cualquier operador puede destruir entradas ajenas
+[R5] La entrada se va y vuelve a la vendedora: ¿revive el listado viejo?
+     Bob compró por el listado viejo, al precio viejo
+     → ✘ VULNERABLE: un listado olvidado se ejecuta sin que la vendedora lo haya vuelto a decidir
+[N3] El portero marca una entrada como usada el día antes del evento
+     no existe forma de acotar el horario del portero
+     marcada como usada hoy: Alice no va a poder entrar mañana
+     → ✘ VULNERABLE: el portero (o quien robe su llave) puede marcar entradas en cualquier momento
+[N6] Después de un canje, ¿sigue vigente la autorización de puntos?
+     autorización aprobada: 100 · costo del canje: 100 · autorización que queda: 100
+     → ✘ VULNERABLE: el permiso dado para un canje queda vivo para los siguientes
+════════════════════════════════════════════════════════════════════
+ Resumen: 15 ataques funcionaron · 0 bloqueados (de 15)
+════════════════════════════════════════════════════════════════════

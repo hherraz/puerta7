@@ -35,7 +35,10 @@ interface Observable {
 const OBSERVABLES: readonly Observable[] = [
     // Entrada: los eventos que mueven el estado de un token.
     { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "EntradaEmitida" },
+    { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "CompraReservada" },
+    { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "CompraReprogramada" },
     { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "EntradaComprada" },
+    { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "VentanaIngresoDefinida" },
     { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "EntradaUsada" },
     { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "EntradaQuemada" },
     { direccion: direccionEntrada, abi: ENTRADA_ABI, eventName: "Transfer" },
@@ -61,7 +64,9 @@ const OBSERVABLES: readonly Observable[] = [
     { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "SorteoAbierto" },
     { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "PostulacionComprometida" },
     { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "PostulacionRevelada" },
+    { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "CierreSolicitado" },
     { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "SorteoCerrado" },
+    { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "FondosRetirados" },
     { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "EntradaReclamada" },
     { direccion: direccionSorteo, abi: SORTEO_ABI, eventName: "DepositoDevuelto" },
 ];

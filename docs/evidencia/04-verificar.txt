@@ -1,0 +1,39 @@
+# Verificación automática contra el nodo local
+# Fecha: 2026-10-22 10:56:35 -0300
+# Comando: corepack pnpm verificar   (= hardhat run scripts/verificar.ts --network localhost)
+
+$ hardhat run scripts/verificar.ts --network localhost
+
+Direcciones que ve el front:
+  Entrada   0x5FbDB2315678afecb367f032d93F642f64180aa3
+  Puntos    0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+  Canje     0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+  Reventa   0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+  Sorteo    0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+
+Lecturas:
+  precio()   = 0.05 ETH
+  owner()    = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+  portero()  = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+  puntos     = 0.0
+  emisor     = 0x5FbDB2315678afecb367f032d93F642f64180aa3
+  quemador   = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+  reventa    = entrada 0x5FbDB2315678afecb367f032d93F642f64180aa3
+  sorteo     = deposito 0.01 ETH
+
+Emitiendo 3 entradas desde el organizador (filas V0, V1, V2)…
+  emitidas()    = 3
+  disponibles() = 3
+  comprador tiene 1 entrada(s), tokenId 2
+  datosAsiento(2) = sector 1, fila V1, asiento 2
+  estado(2) = 2 (2 = Vendida)
+
+Marcando la entrada como usada desde la billetera del portero…
+  estado(2) = 3 (3 = Usada)
+
+Control de acceso: el portero NO pudo retirar fondos. Correcto.
+
+Aprobando y listando la entrada usada (debe fallar: no se revende usada)…
+  EntradaUsada: no se listó una entrada ya usada. Correcto.
+
+✓ Verificación completa.

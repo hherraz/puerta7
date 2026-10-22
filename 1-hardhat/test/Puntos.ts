@@ -215,6 +215,16 @@ describe("Puntos", function () {
         });
     });
 
+    describe("transferOwnership", function () {
+        it("el traspaso necesita que el nuevo organizador lo acepte", async function () {
+            const { puntos, organizador, otro } = await desplegar();
+            await puntos.transferOwnership(otro.address);
+            expect(await puntos.owner()).to.equal(organizador.address);
+            await puntos.connect(otro).acceptOwnership();
+            expect(await puntos.owner()).to.equal(otro.address);
+        });
+    });
+
     describe("Máquina de estados", function () {
         it("sin emisor designado nadie emite; sin quemador nadie quema", async function () {
             const { puntos, titular } = await desplegar();

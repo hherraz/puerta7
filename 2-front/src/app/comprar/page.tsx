@@ -27,6 +27,12 @@ import { useTransaccion } from "@/lib/estadoTx";
  * `precio × cantidad`, así que comprar dos o más fallaba siempre con
  * "Pago incorrecto". Se sacó el selector en vez de agregar un Carrito: el
  * contrato no lo soporta y prometerlo sería una mentira.
+ *
+ * La compra va en dos pasos: `comprar()` cobra y reserva, y
+ * `confirmarCompras()` asigna el asiento con el hash del bloque siguiente
+ * al pago (que nadie conocía al pagar). Cualquiera puede confirmar, así
+ * que el botón de recibir queda siempre visible: si alguien pagó y cerró
+ * la página, igual puede volver a buscar su entrada.
  */
 export default function ComprarPage() {
     const { isConnected, chainId } = useAccount();
@@ -54,6 +60,14 @@ export default function ComprarPage() {
               }
             : undefined,
     );
+
+    // Hasta 10 reservas pendientes, en orden de llegada (la propia incluida).
+    const recibir = useTransaccion({
+        address: direccion,
+        abi: ENTRADA_ABI,
+        functionName: "confirmarCompras",
+        args: [10n],
+    });
 
     // Tras confirmar, se vuelve al estado inicial para que el comprador
     // pueda seguir comprando sin recargar la página.
@@ -153,13 +167,41 @@ export default function ComprarPage() {
 
                     {compra.fase === "confirmada" && (
                         <p className="text-xs text-emerald-400">
-                            Listo — revisá{" "}
-                            <Link href="/mis-entradas" className="underline underline-offset-4">
-                                Mis entradas
-                            </Link>
-                            .
+                            Pago recibido: tu entrada está reservada. Ahora tocá «Recibir
+                            entrada».
                         </p>
                     )}
+
+                    <Separador />
+
+                    <div className="space-y-3">
+                        <p className="etiqueta">Paso 2 · Recibir entrada</p>
+                        <p className="text-xs text-ink-500">
+                            El asiento se sortea con el hash del bloque siguiente a tu pago,
+                            que nadie conocía cuando pagaste: así nadie puede comprar, mirar
+                            qué le tocó y deshacer la compra si no le gusta.
+                        </p>
+                        <Boton
+                            bloque
+                            tamano="lg"
+                            variante="secundario"
+                            cargando={recibir.ocupada}
+                            onClick={recibir.ejecutar}
+                        >
+                            Recibir entrada
+                        </Boton>
+                        <EstadoTransaccion transaccion={recibir} />
+                        {recibir.fase === "confirmada" && (
+                            <p className="text-xs text-emerald-400">
+                                Listo — revisá{" "}
+                                <Link href="/mis-entradas" className="underline underline-offset-4">
+                                    Mis entradas
+                                </Link>
+                                . Si todavía no aparece, el bloque que la sortea aún no se
+                                minó: volvé a tocar «Recibir entrada» en unos segundos.
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
         </section>
@@ -175,7 +217,8 @@ function Header() {
             </h1>
             <p className="mt-4 text-base leading-relaxed text-ink-300">
                 El precio es exacto — sin vuelto, sin sorpresas. La butaca se asigna al
-                azar entre las disponibles; no se puede elegir.
+                azar entre las disponibles, con un bloque posterior a tu pago; no se
+                puede elegir.
             </p>
         </header>
     );

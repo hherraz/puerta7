@@ -1,0 +1,61 @@
+# Demo de ataques contra el código CORREGIDO, en el nodo local (Hardhat, chain 31337)
+# Comando: DEMO_VERSION="DESPUÉS (corregido)" npx hardhat run scripts/demo-ataques.ts --network localhost
+
+════════════════════════════════════════════════════════════════════
+ DEMO DE ATAQUES — versión: DESPUÉS (corregido)
+ Red: chain 31337 · bloque inicial 514
+ Fecha: 2026-10-22T14:03:30.955Z
+════════════════════════════════════════════════════════════════════
+[F1] DoS del cierre del sorteo: ¿encarecen el cierre los postulantes extra?
+     gas de cerrar() con  3 postulantes y 1 entrada: 111137
+     gas de cerrar() con 18 postulantes y 1 entrada: 118737
+     diferencia: 7600 gas
+     → ✔ BLOQUEADO: el costo de cerrar no depende de cuántos se postulan
+[F2] El organizador intenta reabrir un sorteo ya cerrado (para volver a sortear)
+     abrirSorteo() revirtió: SorteoYaAbierto()
+     → ✔ BLOQUEADO: un contrato hace un solo sorteo
+[F3] El organizador sube la comisión al 100% justo antes de una compra en reventa
+     la vendedora lista a 0.1 ETH con comisión 10% (espera cobrar 0.09 ETH)
+     la vendedora retiró ≈ 0.089969652999787571 ETH (neto de gas)
+     → ✔ BLOQUEADO: la vendedora cobró lo pactado al listar
+[F4] Se llama a renounceOwnership() en Entrada con plata recaudada
+     renounceOwnership() revirtió: Renuncia deshabilitada
+     → ✔ BLOQUEADO: no se puede renunciar; el organizador conserva el control
+[F5] Un postulante manda el doble del depósito al sorteo
+     revirtió: DepositoExcedido()
+     → ✔ BLOQUEADO: se exige el depósito exacto
+[F6] Se emite una entrada con una fila que trae JSON
+     emitir() revirtió: Fila invalida
+     → ✔ BLOQUEADO: fila y asiento solo aceptan letras y números
+[N1] Un contrato atacante compra y revierte hasta conseguir la entrada #3
+     10 intentos, ninguno le dio la entrada #3
+     → ✔ BLOQUEADO: pagar solo reserva; el asiento sale de un bloque que todavía no existe
+[N2] El último en revelar calcula el resultado ANTES de que cierre el sorteo
+     predicción (solo con lo revelado): 0x91afe948ee002b31…
+     entropía final real:               0x00f657a158f20009…
+     → ✔ BLOQUEADO: el resultado depende del hash de un bloque fijado después de la revelación
+[R1] Depósitos de ganadores y de quienes no revelan, después del cierre
+     saldo que queda en el contrato: 0.0 ETH
+     → ✔ BLOQUEADO: el organizador retira lo que no se devuelve y no queda nada atrapado
+[R2] Se abre un sorteo de 100.000 entradas (imposible de cerrar en un bloque)
+     revirtió: DemasiadasEntradas()
+     → ✔ BLOQUEADO: hay un tope (500) que siempre entra en un cierre
+[R3] El organizador transfiere el contrato a una dirección mal tipeada
+     owner() después del traspaso: sigue siendo el organizador
+     → ✔ BLOQUEADO: el traspaso espera a que el nuevo dueño lo acepte
+[R4] Un operador autorizado (con un bug o malicioso) quema la entrada de alguien
+     quemar() revirtió: ERC721InsufficientApproval("0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc", 1)
+     → ✔ BLOQUEADO: hace falta el permiso del dueño sobre esa entrada
+[R5] La entrada se va y vuelve a la vendedora: ¿revive el listado viejo?
+     comprar() revirtió: ListadoInactivo()
+     → ✔ BLOQUEADO: si la entrada cambió de dueño, el listado viejo deja de valer
+[N3] El portero marca una entrada como usada el día antes del evento
+     el organizador fijó el ingreso para mañana
+     usar() revirtió: Fuera del horario de ingreso
+     → ✔ BLOQUEADO: solo puede marcar dentro del horario del evento
+[N6] Después de un canje, ¿sigue vigente la autorización de puntos?
+     autorización aprobada: 100 · costo del canje: 100 · autorización que queda: 0
+     → ✔ BLOQUEADO: el canje consume la autorización
+════════════════════════════════════════════════════════════════════
+ Resumen: 0 ataques funcionaron · 15 bloqueados (de 15)
+════════════════════════════════════════════════════════════════════

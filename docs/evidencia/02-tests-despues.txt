@@ -1,0 +1,262 @@
+# Corrida de tests DESPUES de corregir (código final)
+# Fecha: 2026-10-22 11:06:21 -0300
+# Commit base: fb59636 + correcciones
+# Comando: corepack pnpm test   (en 1-hardhat/)
+
+$ hardhat test
+No contracts to compile
+
+Running Solidity tests
+
+
+Running Mocha tests
+
+
+  Canje
+    definirCosto / consultarCosto
+      ✔ solo el organizador define costos y emite CostoDefinido (59ms)
+      ✔ consultarCosto devuelve lo definido
+    canjear
+      ✔ quema puntos y entrada usada, y entrega una de sector superior (61ms)
+      ✔ revierte si la entrada no está Usada (invariante 1)
+      ✔ revierte si canjea quien no es el titular (invariante 2)
+      ✔ revierte si el destino no es superior al actual (invariante 5)
+      ✔ revierte si no hay costo definido para ese salto
+      ✔ revierte si los puntos no alcanzan
+      ✔ revierte sin autorización previa sobre los puntos
+      ✔ revierte sin autorización previa sobre la entrada
+      ✔ la misma entrada no se canjea dos veces (invariante 3)
+    Máquina de estados
+      ✔ el flujo completo exige Usada + titular + costo + 2 autorizaciones
+    transferOwnership
+      ✔ el traspaso necesita que el nuevo organizador lo acepte
+    huecos y ambigüedades — no implementar todavía
+      - [AMBIGUO] no se emite la mejora si el aforo del destino está completo (invariante 6)
+      ✔ invariante 7: si la mejora no se puede emitir, no se queman los puntos ni la entrada
+      ✔ las autorizaciones previas no deben ser infinitas: el canje consume la de puntos
+      - si el organizador olvida una designación, el canje falla en producción
+
+  Entrada - casos complementarios y seguridad
+    casos de la spec
+      ✔ usar revierte si el tokenId no existe
+      ✔ una entrada Usada transferida a otro dueno sigue sin poder usarse (invariante 3)
+      ✔ al agotar el stock cada tokenId se vende exactamente una vez
+      ✔ nadie puede mover una entrada Emitida (sin vender) que tiene el contrato
+      ✔ nadie puede aprobarse para una entrada Emitida
+      ✔ tokenURI revierte para un tokenId inexistente
+      ✔ transferOwnership traspasa los permisos de organizador
+    HALLAZGOS de seguridad (comportamiento vigente)
+      ✔ H1: renounceOwnership revierte y el organizador conserva los fondos
+      ✔ H2: fila/asiento '00' se aceptan y '01' no choca con '1'
+      ✔ H3: una comilla en la fila se rechaza al emitir
+      ✔ H4: emitir ignora en silencio las filas sobrantes
+
+  Entrada
+    Despliegue
+      ✔ almacena el precio y el portero fijados al desplegar
+      ✔ revierte si el portero es la direccion cero
+      ✔ revierte si el precio es cero
+    emitir
+      control de acceso (invariante 2)
+        ✔ revierte si llama un address distinto al organizador
+      validacion de entradas
+        ✔ revierte si el sector esta fuera de A-D (mayor que 4)
+        ✔ revierte si el sector es 0
+        ✔ acepta sectores 1, 2, 3 y 4 (A, B, C, D)
+        ✔ revierte si la fila es '0'
+        ✔ revierte si el asiento es '0'
+        ✔ acepta filas y asientos alfanumericos (la spec los permite)
+        ✔ revierte si la fila o el asiento traen caracteres no alfanumericos (inyeccion en tokenURI)
+        ✔ revierte si los arrays tienen longitudes distintas
+        ✔ revierte si se emite un lote vacio
+      asiento duplicado (invariante 1)
+        ✔ revierte si el (sector, fila, asiento) ya fue emitido
+        ✔ permite el mismo (fila, asiento) en distintos sectores
+        ✔ si una entrada del lote es duplicada, ninguna del lote se emite (atomicidad)
+      happy path
+        ✔ crea las entradas en estado Emitida y las asigna al contrato
+        ✔ actualiza los contadores emitidas y disponibles
+        ✔ emite EntradaEmitida por cada entrada con tokenId, sector, fila y asiento
+        ✔ asigna tokenIds secuenciales comenzando en 1 entre llamadas sucesivas
+    comprar
+      pago (invariante 6, decision pago exacto)
+        ✔ revierte si se paga de mas
+        ✔ revierte si se paga de menos
+        ✔ revierte si no se envia valor
+      sin entradas disponibles (decision)
+        ✔ revierte si nunca se emitio ninguna
+        ✔ revierte una vez agotadas las existentes
+      happy path y transicion de estado
+        ✔ asigna una entrada Emitida al comprador y la marca Vendida
+        ✔ acumula el Ether en el contrato sin entregarlo al organizador todavia
+        ✔ emite CompraReservada al pagar y EntradaComprada al confirmar
+        ✔ permite que un mismo comprador compre varias entradas (sin limite por direccion)
+        ✔ no permite al comprador elegir el asiento (comprar no recibe parametros)
+      azar de un bloque futuro (N1: simular y revertir)
+        ✔ pagar solo reserva: el asiento se asigna recien cuando existe el hash del bloque siguiente
+        ✔ un contrato atacante no puede comprar y revertir hasta conseguir el asiento que quiere
+        ✔ el asiento sale del hash del bloque siguiente a la reserva: no depende de quien ni cuando confirma
+    confirmarCompras
+      ✔ cualquiera puede confirmar y las reservas se procesan en orden de llegada
+      ✔ si nadie confirma en 256 bloques, la reserva se reprograma con un bloque nuevo
+    usar
+      control de acceso (invariante 4)
+        ✔ revierte si llama alguien distinto al portero (incluso el dueno)
+      estado valido (invariante 5)
+        ✔ revierte si la entrada aun esta Emitida (no Vendida)
+      invariante 3: entrada usada no se vuelve a usar
+        ✔ revierte la segunda llamada a usar
+      happy path
+        ✔ marca la entrada como Usada sin cambiar al dueno
+        ✔ emite el evento EntradaUsada con tokenId y dueno
+      ventana de ingreso (N3: el portero como oraculo)
+        ✔ con ventana definida, el portero solo marca durante el horario del evento
+    definirVentanaIngreso
+      ✔ solo el organizador la define, rechaza inicio >= fin y emite VentanaIngresoDefinida
+    retirar
+      control de acceso (invariante 7)
+        ✔ revierte si llama alguien distinto al organizador
+      fondos
+        ✔ revierte si el balance del contrato es cero
+      happy path
+        ✔ transfiere todo el Ether acumulado al organizador
+        ✔ emite el evento FondosRetirados con destinatario y monto
+        ✔ permite retirar varias veces (acumulando compras entre retiradas)
+    renounceOwnership
+      ✔ revierte: sin organizador lo recaudado quedaria atrapado para siempre
+    transferOwnership
+      ✔ el traspaso necesita que el nuevo organizador lo acepte (un error de tipeo no pierde el control)
+    quemar
+      ✔ un operador no puede quemar una entrada sin permiso de su dueño
+    tokenURI
+      ✔ devuelve un data URI base64 JSON con un SVG que menciona sector, fila y asiento
+    Transferencia ERC-721 (decision)
+      ✔ permite transferir una entrada Vendida entre dos cuentas
+      ✔ permite transferir una entrada Usada entre dos cuentas
+      ✔ cuenta los cambios de dueño entre personas (Reventa lo usa para invalidar listados viejos)
+    Maquina de estados
+      ✔ no existe una transicion Emitida -> Usada directa (usar exige Vendida)
+
+  Puntos
+    designarEmisor / designarQuemador
+      ✔ solo el organizador puede designar (y emite los eventos)
+      ✔ revierte si designa alguien distinto al organizador
+      ✔ redesignar reemplaza al anterior: el viejo deja de poder emitir
+    emitir
+      ✔ solo el emisor autorizado crea puntos (invariante 1)
+      ✔ acredita el saldo, suma al total y emite PuntosEmitidos
+      ✔ no emite dos veces por la misma asistencia (invariante 3)
+      ✔ sí emite por asistencias distintas del mismo titular
+    quemar
+      ✔ solo el quemador autorizado destruye puntos de otro (invariante 2)
+      ✔ descuenta el saldo, baja el total y emite PuntosQuemados
+      ✔ revierte si se quema más que el saldo
+    ERC-20 estándar
+      ✔ usa 18 decimales (decisión de la spec)
+      ✔ transfer mueve saldo entre cuentas y emite Transfer
+      ✔ transfer revierte si deja al remitente en negativo (invariante 5)
+      ✔ transferFrom no mueve más de lo autorizado (invariante 6)
+      ✔ transferFrom descuenta lo autorizado al mover (invariante 6)
+      ✔ totalSupply es la suma de saldos tras emitir, mover y quemar (invariante 4)
+      ✔ los puntos son transferibles libremente (decisión de la spec)
+    transferOwnership
+      ✔ el traspaso necesita que el nuevo organizador lo acepte
+    Máquina de estados
+      ✔ sin emisor designado nadie emite; sin quemador nadie quema
+    hueco deliberado
+      - nadie puede afirmar una asistencia que no ocurrió
+      - [INTEGRACIÓN] Entrada emite los puntos al marcar Usada
+
+  Reventa
+    configurar
+      ✔ solo el organizador configura y emite Configurado
+      ✔ revierte si la comisión supera el 100% (toda compra revertiría)
+    listar
+      ✔ el titular lista con approve previo y emite Listado
+      ✔ revierte si la entrada ya fue usada (invariante 1)
+      ✔ revierte si lista quien no posee la entrada (invariante 2)
+      ✔ revierte sobre el techo y acepta justo en el techo (invariante 3)
+      ✔ revierte sin autorización previa sobre el token
+    comprar
+      ✔ paga el precio exacto y recibe la entrada en la misma tx (invariante 5)
+      ✔ la comisión queda fijada al listar: subirla después no recorta al vendedor
+      ✔ revierte si el pago no es exacto
+      ✔ un listado vendido no se puede volver a comprar (invariante 4)
+      ✔ un listado cancelado no se puede comprar (invariante 4)
+      ✔ un listado viejo no se puede comprar si la entrada cambió de dueño después de listarse
+      ✔ si la entrada se usa mientras está listada, la compra revierte
+      ✔ el vendedor cobra sin la comisión y el organizador la suya (invariante 6, pull)
+    cancelar
+      ✔ solo el vendedor cancela, emite Cancelado y conserva su entrada
+      ✔ revierte si cancela alguien distinto al vendedor
+      ✔ un listado ya vendido no se puede cancelar
+    retirar
+      ✔ el vendedor retira precio menos comisión y emite Retirado
+      ✔ el organizador retira la comisión acumulada
+      ✔ revierte si no hay fondos para retirar y al segundo retiro (invariante 8)
+    renounceOwnership
+      ✔ revierte: la comisión se acredita al organizador y quedaría atrapada (invariante 8)
+    transferOwnership
+      ✔ el traspaso necesita que el nuevo organizador lo acepte
+    Máquina de estados
+      ✔ Activo -> Vendido y Activo -> Cancelado son terminales
+    huecos deliberados
+      - invariante 7: una reentrada en comprar no compra dos veces ni retira de más
+      ✔ listar no exige aprobación infinita sobre toda la colección: alcanza con aprobar esa entrada
+      - nadie puede pagar por fuera para burlar el techo de precio
+      - una compra vista en el mempool no debe poder ser adelantada (front-running)
+
+  Sorteo
+    abrirSorteo
+      ✔ revierte si llama alguien distinto al organizador
+      ✔ emite SorteoAbierto con la cantidad de entradas anunciada
+      ✔ no se puede reabrir: ni con el sorteo en curso ni después del cierre
+      ✔ revierte si se anuncian más entradas de las que entran en un cierre (tope por gas)
+    comprometer
+      ✔ acepta el compromiso con depósito y emite PostulacionComprometida
+      ✔ revierte si el depósito es insuficiente (invariante: depósito requerido)
+      ✔ revierte si el depósito excede lo requerido (el excedente quedaría atrapado)
+      ✔ revierte si el mismo postulante compromete dos veces
+      ✔ revierte si no hay sorteo abierto
+      ✔ revierte una vez vencido el plazo de compromiso (invariante 2)
+    revelar
+      ✔ acepta la revelación que coincide y emite PostulacionRevelada
+      ✔ revierte si el valor no corresponde al compromiso (invariante 1)
+      ✔ revierte si se revela antes de que termine el compromiso (invariante 3)
+      ✔ revierte la segunda revelación del mismo postulante
+      ✔ revierte si revela quien nunca comprometió
+      ✔ el compromiso copiado de otro no sirve: incluye la dirección
+    cerrar
+      ✔ revierte si todavía no venció el plazo de revelación
+      ✔ cualquiera puede cerrar vencido el plazo: primero fija el bloque, después sortea
+      ✔ el cierre no se bloquea si un comprometido nunca reveló
+      ✔ si nadie completa el cierre en 256 bloques, se fija un bloque nuevo
+      ✔ el costo de cerrar no crece con la cantidad de postulantes (sin DoS) (63ms)
+    reclamar
+      ✔ revierte si el sorteo todavía no cerró
+      ✔ el ganador recibe su entrada y emite EntradaReclamada (invariante 4)
+      ✔ nadie reclama dos veces (invariante 6)
+      ✔ no se entregan más entradas que las anunciadas (invariante 5)
+      ✔ con más postulantes que entradas ganan exactamente las anunciadas, una por cabeza (invariantes 4, 5 y 7) (58ms)
+      ✔ quien reveló y perdió recupera su depósito (invariante 7)
+      ✔ revierte si reclama quien no reveló
+    retirar
+      ✔ el organizador retira los depósitos que no se devuelven: el del ganador y el de quien no reveló
+      ✔ revierte antes del cierre, si llama otro y cuando no queda nada que retirar
+    renounceOwnership
+      ✔ revierte: el organizador retira lo recaudado y sin él quedaría atrapado
+    transferOwnership
+      ✔ el traspaso necesita que el nuevo organizador lo acepte
+    Máquina de estados
+      ✔ Abierto -> En revelación -> Cerrado solo avanza con el tiempo
+    huecos deliberados
+      ✔ invariante 8: el resultado no se puede calcular antes de que termine la revelación
+      ✔ quien no revela no puede reclamar y su depósito pasa al organizador (consecuencia definida)
+
+
+  160 passing (3s)
+  7 pending
+
+
+167 passing (167 mocha)
+

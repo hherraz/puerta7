@@ -2,9 +2,9 @@ packages:
   - 1-hardhat
   - 2-front
 allowBuilds:
-  bufferutil: set this to true or false
+  bufferutil: true
   esbuild: true
-  keccak: set this to true or false
+  keccak: true
   sharp: false
   unrs-resolver: false
-  utf-8-validate: set this to true or false
+  utf-8-validate: true

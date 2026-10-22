@@ -32,6 +32,16 @@ export const SORTEO_ABI = [
     },
     {
         "inputs": [],
+        "name": "DemasiadasEntradas",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "DepositoExcedido",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "DepositoInsuficiente",
         "type": "error"
     },
@@ -74,12 +84,27 @@ export const SORTEO_ABI = [
     },
     {
         "inputs": [],
+        "name": "RenunciaDeshabilitada",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "SinFondosParaRetirar",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "SorteoNoAbierto",
         "type": "error"
     },
     {
         "inputs": [],
         "name": "SorteoNoCerrado",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "SorteoYaAbierto",
         "type": "error"
     },
     {
@@ -117,6 +142,19 @@ export const SORTEO_ABI = [
         "anonymous": false,
         "inputs": [
             {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "bloqueSorteo",
+                "type": "uint256"
+            }
+        ],
+        "name": "CierreSolicitado",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
                 "indexed": true,
                 "internalType": "address",
                 "name": "postulante",
@@ -149,6 +187,44 @@ export const SORTEO_ABI = [
             }
         ],
         "name": "EntradaReclamada",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "destinatario",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "monto",
+                "type": "uint256"
+            }
+        ],
+        "name": "FondosRetirados",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferStarted",
         "type": "event"
     },
     {
@@ -254,6 +330,19 @@ export const SORTEO_ABI = [
     },
     {
         "inputs": [],
+        "name": "MAX_ENTRADAS_POR_SORTEO",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "abierto",
         "outputs": [
             {
@@ -286,6 +375,26 @@ export const SORTEO_ABI = [
         "name": "abrirSorteo",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "acceptOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "bloqueSorteo",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -414,6 +523,19 @@ export const SORTEO_ABI = [
     },
     {
         "inputs": [],
+        "name": "pendingOwner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "reclamar",
         "outputs": [],
         "stateMutability": "nonpayable",
@@ -422,6 +544,13 @@ export const SORTEO_ABI = [
     {
         "inputs": [],
         "name": "renounceOwnership",
+        "outputs": [],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "retirar",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"

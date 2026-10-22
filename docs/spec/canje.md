@@ -67,6 +67,12 @@ Mejoras que no sean cambio de sector, como estacionamiento o acceso anticipado.
 
 Canje entre titulares distintos.
 
+## Cambios tras la revisión de seguridad (octubre 2026)
+
+- **El canje consume la autorización de puntos**: los mueve con `transferFrom` (que descuenta el allowance) y los quema desde el canje. Antes verificaba el allowance pero nunca lo descontaba, así que un approve valía para todos los canjes futuros.
+- `Entrada.quemar` ahora exige además el permiso del titular sobre la entrada (el paso 2 del flujo ya lo daba).
+- El traspaso de organizador es en dos pasos (`transferOwnership` + `acceptOwnership`).
+
 ## [SOLO INSTRUCTOR]
 
 ### El hueco deliberado

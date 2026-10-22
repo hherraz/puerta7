@@ -37,6 +37,14 @@ const E_SIN_PUNTOS = "PuntosInsuficientes";
 const E_AFOTO = "AforoDestinoCompleto"; // se usa al definirse el aforo (ver [AMBIGUO])
 const E_SIN_AUTORIZACION = "AutorizacionInsuficiente";
 
+/** Compra de Entrada en dos pasos: paga y reserva, deja pasar el bloque cuyo
+ *  hash elige el asiento, y confirma. */
+async function comprarEntrada(entrada: any, comprador: any) {
+    await entrada.connect(comprador).comprar({ value: PRECIO });
+    await ethers.provider.send("evm_mine", []);
+    await entrada.connect(comprador).confirmarCompras(10);
+}
+
 async function desplegar() {
     const [organizador, portero, titular, otro] = await ethers.getSigners();
     const entrada: any = await ethers.deployContract("Entrada", [
@@ -66,7 +74,7 @@ async function desplegar() {
 async function conEntradaUsada(saldoPuntos = SALDO, conCosto = true) {
     const ctx = await desplegar();
     await ctx.entrada.emitir(["A"], ["1"], [1]);
-    await ctx.entrada.connect(ctx.titular).comprar({ value: PRECIO });
+    await comprarEntrada(ctx.entrada, ctx.titular);
     const tokenId = 1n;
     await ctx.entrada.connect(ctx.portero).usar(tokenId);
     if (saldoPuntos > 0n) {
@@ -138,7 +146,7 @@ describe("Canje", function () {
         it("revierte si la entrada no está Usada (invariante 1)", async function () {
             const ctx = await desplegar();
             await ctx.entrada.emitir(["A"], ["1"], [1]);
-            await ctx.entrada.connect(ctx.titular).comprar({ value: PRECIO });
+            await comprarEntrada(ctx.entrada, ctx.titular);
             // Queda Vendida, nunca Usada.
             await ctx.canje.definirCosto(1, 2, COSTO);
             await expect(
@@ -224,6 +232,16 @@ describe("Canje", function () {
         });
     });
 
+    describe("transferOwnership", function () {
+        it("el traspaso necesita que el nuevo organizador lo acepte", async function () {
+            const { canje, organizador, otro } = await desplegar();
+            await canje.transferOwnership(otro.address);
+            expect(await canje.owner()).to.equal(organizador.address);
+            await canje.connect(otro).acceptOwnership();
+            expect(await canje.owner()).to.equal(otro.address);
+        });
+    });
+
     describe("huecos y ambigüedades — no implementar todavía", function () {
         it.skip("[AMBIGUO] no se emite la mejora si el aforo del destino está completo (invariante 6)", async function () {
             // La spec enuncia el invariante pero no dice de dónde sale
@@ -234,9 +252,33 @@ describe("Canje", function () {
             // es una definición que falta.
         });
 
-        it.skip("invariante 7: nunca quedan puntos quemados sin mejora entregada", async function () {});
+        it("invariante 7: si la mejora no se puede emitir, no se queman los puntos ni la entrada", async function () {
+            const ctx = await conEntradaUsada();
+            await autorizar(ctx);
+            // La entrada destino (sector 2, fila A, asiento 1) ya existe.
+            await ctx.entrada.emitir(["A"], ["1"], [2]);
+            await expect(
+                ctx.canje.connect(ctx.titular).canjear(ctx.tokenId, 2)
+            ).to.be.revertedWith("Asiento ya emitido");
+            expect(await ctx.puntos.balanceOf(ctx.titular.address)).to.equal(SALDO);
+            expect(await ctx.entrada.ownerOf(ctx.tokenId)).to.equal(
+                ctx.titular.address
+            );
+        });
 
-        it.skip("las autorizaciones previas no deben ser infinitas", async function () {});
+        it("las autorizaciones previas no deben ser infinitas: el canje consume la de puntos", async function () {
+            // Antes el canje verificaba el allowance pero no lo descontaba:
+            // un approve hecho una vez valía para todos los canjes futuros.
+            const ctx = await conEntradaUsada();
+            await autorizar(ctx); // approve exacto: COSTO
+            await ctx.canje.connect(ctx.titular).canjear(ctx.tokenId, 2);
+            expect(
+                await ctx.puntos.allowance(
+                    ctx.titular.address,
+                    await ctx.canje.getAddress()
+                )
+            ).to.equal(0n);
+        });
 
         it.skip("si el organizador olvida una designación, el canje falla en producción", async function () {});
     });

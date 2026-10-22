@@ -1,0 +1,148 @@
+# Despliegue del sistema completo en el nodo local (Hardhat, chain 31337)
+# Fecha: 2026-10-22 10:56:00 -0300
+# Comando: corepack pnpm desplegar   (= hardhat ignition deploy ignition/modules/SistemaPuerta7.ts --network localhost)
+
+$ hardhat ignition deploy ignition/modules/SistemaPuerta7.ts --network localhost
+
+
+
+
+
+
+Hardhat Ignition starting for [ SistemaPuerta7 ]...Hardhat Ignition 🚀
+
+Deploying [ SistemaPuerta7 ]
+
+Batch #1
+  Executing SistemaPuerta7#Entrada...
+  Executing SistemaPuerta7#Puntos...
+
+Batch #1
+  Executing SistemaPuerta7#Entrada...
+  Executing SistemaPuerta7#Puntos...
+
+Batch #1
+  Executed SistemaPuerta7#Entrada
+  Executing SistemaPuerta7#Puntos...
+
+Batch #1
+  Executed SistemaPuerta7#Entrada
+  Executing SistemaPuerta7#Puntos...
+
+Batch #1
+  Executed SistemaPuerta7#Entrada
+  Executed SistemaPuerta7#Puntos
+
+Batch #1
+  Executed SistemaPuerta7#Entrada
+  Executed SistemaPuerta7#Puntos
+
+Batch #2
+  Executing SistemaPuerta7#Canje...
+  Executing SistemaPuerta7#Puntos.designarEmisor...
+  Executing SistemaPuerta7#Reventa...
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executing SistemaPuerta7#Canje...
+  Executing SistemaPuerta7#Puntos.designarEmisor...
+  Executing SistemaPuerta7#Reventa...
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executing SistemaPuerta7#Puntos.designarEmisor...
+  Executing SistemaPuerta7#Reventa...
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executing SistemaPuerta7#Puntos.designarEmisor...
+  Executing SistemaPuerta7#Reventa...
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executed SistemaPuerta7#Puntos.designarEmisor
+  Executing SistemaPuerta7#Reventa...
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executed SistemaPuerta7#Puntos.designarEmisor
+  Executing SistemaPuerta7#Reventa...
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executed SistemaPuerta7#Puntos.designarEmisor
+  Executed SistemaPuerta7#Reventa
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executed SistemaPuerta7#Puntos.designarEmisor
+  Executed SistemaPuerta7#Reventa
+  Executing SistemaPuerta7#Sorteo...
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executed SistemaPuerta7#Puntos.designarEmisor
+  Executed SistemaPuerta7#Reventa
+  Executed SistemaPuerta7#Sorteo
+
+Batch #2
+  Executed SistemaPuerta7#Canje
+  Executed SistemaPuerta7#Puntos.designarEmisor
+  Executed SistemaPuerta7#Reventa
+  Executed SistemaPuerta7#Sorteo
+
+Batch #3
+  Executing SistemaPuerta7#designarCanjeComoOperador...
+  Executing SistemaPuerta7#designarSorteoComoOperador...
+  Executing SistemaPuerta7#Puntos.designarQuemador...
+
+Batch #3
+  Executing SistemaPuerta7#designarCanjeComoOperador...
+  Executing SistemaPuerta7#designarSorteoComoOperador...
+  Executing SistemaPuerta7#Puntos.designarQuemador...
+
+Batch #3
+  Executing SistemaPuerta7#designarCanjeComoOperador...
+  Executing SistemaPuerta7#designarSorteoComoOperador...
+  Executed SistemaPuerta7#Puntos.designarQuemador
+
+Batch #3
+  Executing SistemaPuerta7#designarCanjeComoOperador...
+  Executing SistemaPuerta7#designarSorteoComoOperador...
+  Executed SistemaPuerta7#Puntos.designarQuemador
+
+Batch #3
+  Executed SistemaPuerta7#designarCanjeComoOperador
+  Executing SistemaPuerta7#designarSorteoComoOperador...
+  Executed SistemaPuerta7#Puntos.designarQuemador
+
+Batch #3
+  Executed SistemaPuerta7#designarCanjeComoOperador
+  Executing SistemaPuerta7#designarSorteoComoOperador...
+  Executed SistemaPuerta7#Puntos.designarQuemador
+
+Batch #3
+  Executed SistemaPuerta7#designarCanjeComoOperador
+  Executed SistemaPuerta7#designarSorteoComoOperador
+  Executed SistemaPuerta7#Puntos.designarQuemador
+
+Batch #3
+  Executed SistemaPuerta7#designarCanjeComoOperador
+  Executed SistemaPuerta7#designarSorteoComoOperador
+  Executed SistemaPuerta7#Puntos.designarQuemador
+
+[ SistemaPuerta7 ] successfully deployed 🚀
+
+Deployed Addresses
+
+SistemaPuerta7#Entrada - 0x5FbDB2315678afecb367f032d93F642f64180aa3
+SistemaPuerta7#Puntos - 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+SistemaPuerta7#Canje - 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+SistemaPuerta7#Reventa - 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+SistemaPuerta7#Sorteo - 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707

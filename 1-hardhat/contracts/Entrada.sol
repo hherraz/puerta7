@@ -13,7 +13,8 @@ pragma solidity ^0.8.28;
  *  Tres roles coexisten:
  *    - Organizador (owner): emite las entradas y retira lo recaudado.
  *    - Portero: marca una entrada Vendida como Usada en la puerta.
- *    - Comprador: paga el precio exacto y recibe una entrada al azar.
+ *    - Comprador: paga el precio exacto y reserva; el asiento se le
+ *      asigna al azar con el hash de un bloque posterior al pago.
  *
  *  Máquina de estados:  Inexistente → Emitida → Vendida → Usada
  *  Las transiciones son unidireccionales y están forzadas por el
@@ -22,10 +23,13 @@ pragma solidity ^0.8.28;
 
 import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Base64 } from "@openzeppelin/contracts/utils/Base64.sol";
 
-contract Entrada is ERC721, Ownable {
+// Ownable2Step: el traspaso de organizador se completa recién cuando el
+// nuevo lo acepta, así un error de tipeo en la dirección no pierde el control.
+contract Entrada is ERC721, Ownable2Step {
 
     // ===========================================================
     // TIPOS DEL DOMINIO
@@ -102,6 +106,31 @@ contract Entrada is ERC721, Ownable {
     /// mejora. Los designa el organizador tras el despliegue.
     mapping(address cuenta => bool) public operadorAutorizado;
 
+    /// @notice Compra pagada a la espera de su asiento. El asiento sale del
+    /// hash del bloque siguiente a `bloque`, que no existe cuando se paga.
+    struct Reserva {
+        address comprador;
+        uint256 bloque;
+    }
+
+    /// @dev Reservas en orden de llegada (ids desde 1). Se procesan en ese
+    /// orden: el estado de `_disponibles` al asignar una reserva no depende
+    /// de cuándo la confirme cada uno.
+    mapping(uint256 idReserva => Reserva) private _reservas;
+    uint256 private _reservasCreadas;
+    uint256 private _reservasProcesadas;
+
+    /// @notice Cuántas veces cambió de dueño cada entrada entre personas (no
+    /// cuenta el minteo ni la primera venta desde el contrato). Reventa lo
+    /// usa para que un listado viejo no reviva si la entrada se fue y volvió.
+    mapping(uint256 tokenId => uint256) public transferencias;
+
+    /// @notice Horario en que el portero puede marcar entradas (timestamps).
+    /// Mientras `finIngreso` sea 0 no hay ventana. Acota al portero, que es
+    /// el oráculo del sistema: no puede marcar "desde su casa el día antes".
+    uint256 public inicioIngreso;
+    uint256 public finIngreso;
+
     // ===========================================================
     // EVENTOS
     // ===========================================================
@@ -142,6 +171,15 @@ contract Entrada is ERC721, Ownable {
     );
 
     event EntradaQuemada(uint256 indexed tokenId);
+
+    event CompraReservada(
+        uint256 indexed idReserva,
+        address indexed comprador
+    );
+
+    event CompraReprogramada(uint256 indexed idReserva);
+
+    event VentanaIngresoDefinida(uint256 inicio, uint256 fin);
 
     // ===========================================================
     // ERRORES
@@ -237,6 +275,13 @@ contract Entrada is ERC721, Ownable {
         _;
     }
 
+    /// @notice Deshabilitada: `retirar` paga a `owner()`, así que sin
+    /// organizador lo recaudado quedaría atrapado para siempre (y no se
+    /// podría emitir más). Para cambiar de organizador: `transferOwnership`.
+    function renounceOwnership() public pure override {
+        revert("Renuncia deshabilitada");
+    }
+
     // ===========================================================
     // ORGANIZADOR — emitir
     // ===========================================================
@@ -328,46 +373,79 @@ contract Entrada is ERC721, Ownable {
     // COMPRADOR — comprar
     // ===========================================================
     //
-    // Pago exacto, sin devolución de vuelto. Elige una entrada
-    // Emitida al azar, se la transfiere al msg.sender y la
-    // marca como Vendida. El Ether queda retenido en el contrato
-    // hasta que el organizador llame a `retirar`.
+    // Compra en dos pasos. Pago exacto, sin devolución de vuelto.
     //
-    // Aleatoriedad:
-    //   Usamos `block.prevrandao` (PREVRANDAO opcode, disponible
-    //   post-Merge). NO es criptográficamente seguro contra un
-    //   validador malicioso, pero cumple la motivación de la
-    //   spec: evitar que bots elijan sistemáticamente los
-    //   mejores asientos. Para aleatoriedad fuerte se necesita
-    //   un VRF (Chainlink VRF, drand, etc.) o un commit-reveal.
+    //   1) `comprar()` cobra y reserva un lugar en la fila.
+    //   2) `confirmarCompras()` (cualquiera puede llamarla) asigna el
+    //      asiento con el hash del bloque SIGUIENTE al de la reserva.
+    //
+    // Por qué dos pasos: con un solo paso el azar (prevrandao) es
+    // público en el momento de comprar, y un contrato atacante puede
+    // comprar, mirar qué asiento le tocó y revertir todo si no le
+    // gusta (solo pierde gas), hasta conseguir el que quiere. Acá,
+    // cuando se paga, el hash que va a elegir el asiento todavía no
+    // existe; cuando existe, ya está fijo: revertir no lo cambia.
+    // Las reservas se procesan en orden de llegada, así nadie puede
+    // elegir en qué momento (con qué lista de disponibles) se asigna
+    // la suya.
+    //
+    // Límite: quien produce ese bloque puede influir en su hash, pero
+    // eso exige ser validador, no solo comprador.
 
-    /// @notice Compra una entrada al azar entre las Emitidas.
-    /// @dev `payable` para recibir ETH. No recibe parámetros:
-    /// el comprador no elige asiento (decisión de diseño).
+    /// @notice Paga el precio exacto y reserva una entrada. El asiento se
+    /// asigna después, con `confirmarCompras`. No recibe parámetros: el
+    /// comprador no elige asiento (decisión de diseño).
     function comprar() external payable {
         if (msg.value != precio) revert("Pago incorrecto");
-        if (_disponibles.length == 0) revert("Sin entradas disponibles");
+        // Las reservas pendientes ya tienen su entrada apartada.
+        if (_disponibles.length <= _reservasCreadas - _reservasProcesadas) {
+            revert("Sin entradas disponibles");
+        }
 
-        // Selección pseudo-aleatoria del índice a remover.
-        uint256 indice = uint256(block.prevrandao) % _disponibles.length;
-        uint256 tokenId = _disponibles[indice];
+        uint256 idReserva = ++_reservasCreadas;
+        _reservas[idReserva] = Reserva({
+            comprador: msg.sender,
+            bloque: block.number
+        });
+        emit CompraReservada(idReserva, msg.sender);
+    }
 
-        // Remoción O(1): swap con el último + pop. No nos
-        // importa perder el orden original; el comprador no
-        // elige asiento.
-        _disponibles[indice] = _disponibles[_disponibles.length - 1];
-        _disponibles.pop();
+    /// @notice Asigna su asiento a hasta `maximo` reservas, en orden de
+    /// llegada. Cualquiera puede llamarla: el resultado de cada reserva ya
+    /// está fijado por el hash de su bloque, no por quién confirma.
+    function confirmarCompras(uint256 maximo) external {
+        for (uint256 n = 0; n < maximo && _reservasProcesadas < _reservasCreadas; n++) {
+            uint256 idReserva = _reservasProcesadas + 1;
+            Reserva storage reserva = _reservas[idReserva];
 
-        estado[tokenId] = Estado.Vendida;
+            // El hash del bloque siguiente a la reserva todavía no existe.
+            if (block.number <= reserva.bloque + 1) return;
 
-        // Minteo vía el hook interno de OZ 5.x. `_update(to,
-        // tokenId, auth)` cuando `_ownerOf(tokenId) == 0`
-        // interpreta la operación como minteo y emite el
-        // `Transfer` correspondiente. `auth = address(0)`
-        // porque nadie autorizó; el contrato es el emisor.
-        _update(msg.sender, tokenId, address(0));
+            // El EVM solo recuerda los últimos 256 hashes. Si nadie
+            // confirmó a tiempo, se fija un bloque nuevo.
+            bytes32 semilla = blockhash(reserva.bloque + 1);
+            if (semilla == bytes32(0)) {
+                reserva.bloque = block.number;
+                emit CompraReprogramada(idReserva);
+                return;
+            }
 
-        emit EntradaComprada(tokenId, msg.sender, precio);
+            uint256 indice = uint256(keccak256(abi.encodePacked(semilla, idReserva))) %
+                _disponibles.length;
+            uint256 tokenId = _disponibles[indice];
+
+            // Remoción O(1): swap con el último + pop.
+            _disponibles[indice] = _disponibles[_disponibles.length - 1];
+            _disponibles.pop();
+
+            address comprador = reserva.comprador;
+            _reservasProcesadas = idReserva;
+            delete _reservas[idReserva];
+            estado[tokenId] = Estado.Vendida;
+            _update(comprador, tokenId, address(0));
+
+            emit EntradaComprada(tokenId, comprador, precio);
+        }
     }
 
     // ===========================================================
@@ -382,6 +460,11 @@ contract Entrada is ERC721, Ownable {
     /// @notice Marca la entrada `tokenId` como Usada. Solo el
     /// portero configurado al desplegar puede llamar.
     function usar(uint256 tokenId) external soloPortero {
+        if (
+            finIngreso != 0 &&
+            (block.timestamp < inicioIngreso || block.timestamp > finIngreso)
+        ) revert("Fuera del horario de ingreso");
+
         Estado est = estado[tokenId];
 
         // Emitida o Inexistente: no se puede usar. La spec no
@@ -410,6 +493,19 @@ contract Entrada is ERC721, Ownable {
     // `FondosRetirados(destinatario, monto)`. Si no hay fondos,
     // revierte (no es no-op silencioso: queremos que la UI
     // muestre un mensaje claro).
+
+    /// @notice Fija el horario en que el portero puede marcar entradas.
+    /// Mitiga (no elimina) el problema del oráculo: un portero deshonesto
+    /// o una llave robada ya no pueden marcar entradas fuera del evento.
+    function definirVentanaIngreso(
+        uint256 inicio,
+        uint256 fin
+    ) external soloOrganizador {
+        if (inicio >= fin) revert("Ventana invalida");
+        inicioIngreso = inicio;
+        finIngreso = fin;
+        emit VentanaIngresoDefinida(inicio, fin);
+    }
 
     /// @notice Retira al organizador todo el Ether acumulado.
     function retirar() external soloOrganizador {
@@ -479,7 +575,10 @@ contract Entrada is ERC721, Ownable {
     /// entregar la mejora; la suite verifica las autorizaciones
     /// previas del titular en Canje, antes de llegar acá).
     function quemar(uint256 tokenId) external soloOperadorAutorizado {
-        _requireOwned(tokenId);
+        // Además de ser operador hace falta el permiso del dueño sobre esa
+        // entrada: ningún operador (ni uno con bugs) quema entradas ajenas
+        // por su cuenta. También impide quemar las que tiene el contrato.
+        _checkAuthorized(_ownerOf(tokenId), msg.sender, tokenId);
         delete estado[tokenId];
         delete _asiento[tokenId];
         _burn(tokenId);
@@ -509,9 +608,10 @@ contract Entrada is ERC721, Ownable {
         return _ultimoId;
     }
 
-    /// @notice Entradas aún a la venta (estado Emitida).
+    /// @notice Entradas aún a la venta: las Emitidas menos las que ya
+    /// están apartadas por una reserva pendiente.
     function disponibles() external view returns (uint256) {
-        return _disponibles.length;
+        return _disponibles.length - (_reservasCreadas - _reservasProcesadas);
     }
 
     // ===========================================================
@@ -567,6 +667,19 @@ contract Entrada is ERC721, Ownable {
     // HELPERS INTERNOS
     // ===========================================================
 
+    /// @dev Hook de OZ 5.x por el que pasa todo cambio de dueño (minteo,
+    /// transferencia, quema). Cuenta los cambios entre personas.
+    function _update(
+        address to,
+        uint256 tokenId,
+        address auth
+    ) internal override returns (address from) {
+        from = super._update(to, tokenId, auth);
+        if (from != address(0) && from != address(this)) {
+            transferencias[tokenId]++;
+        }
+    }
+
     function _validarSector(uint16 sector) private pure {
         if (sector < SECTOR_MIN || sector > SECTOR_MAX) {
             revert("Sector invalido");
@@ -574,22 +687,36 @@ contract Entrada is ERC721, Ownable {
     }
 
     /// @dev Fila "0" se rechaza explícitamente (es el caso
-    /// degenerado que la spec marca como inválido). Cualquier
-    /// otra cadena — incluso alfanumérica — es válida.
+    /// degenerado que la spec marca como inválido). Además debe ser
+    /// alfanumérica (ver `_esAlfanumerico`).
     function _validarFila(string memory fila) private pure {
         bytes memory b = bytes(fila);
-        if (b.length == 0 || (b.length == 1 && b[0] == "0")) {
+        if (b.length == 0 || (b.length == 1 && b[0] == "0") || !_esAlfanumerico(b)) {
             revert("Fila invalida");
         }
     }
 
-    /// @dev Misma regla que la fila: rechaza "0" y la cadena
-    /// vacía. La spec usa "Asiento invalido" como string.
+    /// @dev Misma regla que la fila: rechaza "0", la cadena
+    /// vacía y lo no alfanumérico. La spec usa "Asiento invalido".
     function _validarAsiento(string memory asiento) private pure {
         bytes memory b = bytes(asiento);
-        if (b.length == 0 || (b.length == 1 && b[0] == "0")) {
+        if (b.length == 0 || (b.length == 1 && b[0] == "0") || !_esAlfanumerico(b)) {
             revert("Asiento invalido");
         }
+    }
+
+    /// @dev Solo [0-9A-Za-z], como define la spec. Fila y asiento se
+    /// pegan tal cual en el JSON y el SVG de `tokenURI`: una comilla
+    /// permitiría inyectar campos en la metadata y un "<", marcado en el SVG.
+    function _esAlfanumerico(bytes memory b) private pure returns (bool) {
+        for (uint256 i = 0; i < b.length; i++) {
+            bytes1 c = b[i];
+            bool ok = (c >= "0" && c <= "9") ||
+                (c >= "A" && c <= "Z") ||
+                (c >= "a" && c <= "z");
+            if (!ok) return false;
+        }
+        return true;
     }
 
     function _validarNoEmitida(

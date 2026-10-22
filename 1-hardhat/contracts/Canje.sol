@@ -20,6 +20,7 @@ pragma solidity ^0.8.28;
  * ================================================================ */
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 interface IEntradaCanje {
     function estado(uint256 tokenId) external view returns (uint8);
@@ -48,9 +49,14 @@ interface IPuntosCanje {
         address autorizado
     ) external view returns (uint256);
     function quemar(address titular, uint256 cantidad) external;
+    function transferFrom(
+        address desde,
+        address hacia,
+        uint256 cantidad
+    ) external returns (bool);
 }
 
-contract Canje is Ownable {
+contract Canje is Ownable2Step {
     // Valor de `Entrada.Estado.Usada`.
     uint8 private constant USADA = 3;
 
@@ -135,7 +141,14 @@ contract Canje is Ownable {
             revert AutorizacionInsuficiente();
         }
 
-        puntos.quemar(msg.sender, costo);
+        // Los puntos pasan por `transferFrom`, que DESCUENTA la autorización,
+        // y se queman desde acá. Quemarlos directo de la cuenta del titular
+        // verificaba el allowance pero nunca lo consumía: un approve hecho
+        // una vez valía para todos los canjes futuros.
+        if (!puntos.transferFrom(msg.sender, address(this), costo)) {
+            revert AutorizacionInsuficiente();
+        }
+        puntos.quemar(address(this), costo);
         entrada.quemar(tokenId);
         uint256 tokenIdNuevo = entrada.emitirPara(
             msg.sender,

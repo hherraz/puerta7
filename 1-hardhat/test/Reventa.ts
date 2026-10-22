@@ -36,6 +36,16 @@ const E_NO_VENDEDOR = "NoEsVendedor";
 const E_PAGO = "PagoIncorrecto";
 const E_SIN_FONDOS = "SinFondosParaRetirar";
 const E_SIN_AUTORIZACION = "AutorizacionInsuficiente";
+const E_COMISION = "ComisionInvalida";
+const E_RENUNCIA = "RenunciaDeshabilitada";
+
+/** Compra de Entrada en dos pasos: paga y reserva, deja pasar el bloque cuyo
+ *  hash elige el asiento, y confirma. */
+async function comprarEntrada(entrada: any, comprador: any) {
+    await entrada.connect(comprador).comprar({ value: PRECIO });
+    await ethers.provider.send("evm_mine", []);
+    await entrada.connect(comprador).confirmarCompras(10);
+}
 
 async function desplegar() {
     const [organizador, portero, vendedor, comprador, otro] =
@@ -55,7 +65,7 @@ async function desplegar() {
 async function conEntradaDelVendedor() {
     const ctx = await desplegar();
     await ctx.entrada.emitir(["A"], ["1"], [1]);
-    await ctx.entrada.connect(ctx.vendedor).comprar({ value: PRECIO });
+    await comprarEntrada(ctx.entrada, ctx.vendedor);
     return { ...ctx, tokenId: 1n };
 }
 
@@ -86,6 +96,13 @@ describe("Reventa", function () {
             await expect(
                 reventa.connect(otro).configurar(120n, 5n)
             ).to.be.revert(ethers);
+        });
+
+        it("revierte si la comisión supera el 100% (toda compra revertiría)", async function () {
+            const { reventa } = await desplegar();
+            await expect(
+                reventa.configurar(TECHO, 101n)
+            ).to.be.revertedWithCustomError(reventa, E_COMISION);
         });
     });
 
@@ -160,6 +177,25 @@ describe("Reventa", function () {
             expect(await entrada.ownerOf(tokenId)).to.equal(comprador.address);
         });
 
+        it("la comisión queda fijada al listar: subirla después no recorta al vendedor", async function () {
+            // Si se leyera al comprar, el organizador podría ver la compra
+            // en el mempool, subir la comisión al 100% justo antes y
+            // quedarse con todo el pago del vendedor.
+            const { reventa, vendedor, comprador, idListado } =
+                await conListado();
+            await reventa.configurar(TECHO, 100n);
+            await expect(
+                reventa
+                    .connect(comprador)
+                    .comprar(idListado, { value: PRECIO_LISTA })
+            )
+                .to.emit(reventa, "Comprado")
+                .withArgs(idListado, comprador.address, PRECIO_LISTA, COMISION);
+            await expect(reventa.connect(vendedor).retirar())
+                .to.emit(reventa, "Retirado")
+                .withArgs(vendedor.address, PARA_VENDEDOR);
+        });
+
         it("revierte si el pago no es exacto", async function () {
             const { reventa, comprador, idListado } = await conListado();
             for (const valor of [PRECIO_LISTA - 1n, PRECIO_LISTA + 1n, 0n]) {
@@ -187,6 +223,27 @@ describe("Reventa", function () {
                 reventa
                     .connect(comprador)
                     .comprar(idListado, { value: PRECIO_LISTA })
+            ).to.be.revertedWithCustomError(reventa, E_INACTIVO);
+        });
+
+        it("un listado viejo no se puede comprar si la entrada cambió de dueño después de listarse", async function () {
+            // Con una autorización general (setApprovalForAll), si la entrada
+            // se iba y volvía al vendedor, el listado viejo revivía al precio
+            // viejo sin que el vendedor lo hubiera vuelto a decidir.
+            const { entrada, reventa, vendedor, comprador, otro, tokenId } =
+                await conEntradaDelVendedor();
+            await entrada
+                .connect(vendedor)
+                .setApprovalForAll(await reventa.getAddress(), true);
+            await reventa.connect(vendedor).listar(tokenId, PRECIO_LISTA);
+            await entrada
+                .connect(vendedor)
+                .transferFrom(vendedor.address, otro.address, tokenId);
+            await entrada
+                .connect(otro)
+                .transferFrom(otro.address, vendedor.address, tokenId);
+            await expect(
+                reventa.connect(comprador).comprar(1n, { value: PRECIO_LISTA })
             ).to.be.revertedWithCustomError(reventa, E_INACTIVO);
         });
 
@@ -295,6 +352,26 @@ describe("Reventa", function () {
         });
     });
 
+    describe("renounceOwnership", function () {
+        it("revierte: la comisión se acredita al organizador y quedaría atrapada (invariante 8)", async function () {
+            const { reventa, organizador } = await desplegar();
+            await expect(
+                reventa.renounceOwnership()
+            ).to.be.revertedWithCustomError(reventa, E_RENUNCIA);
+            expect(await reventa.owner()).to.equal(organizador.address);
+        });
+    });
+
+    describe("transferOwnership", function () {
+        it("el traspaso necesita que el nuevo organizador lo acepte", async function () {
+            const { reventa, organizador, otro } = await desplegar();
+            await reventa.transferOwnership(otro.address);
+            expect(await reventa.owner()).to.equal(organizador.address);
+            await reventa.connect(otro).acceptOwnership();
+            expect(await reventa.owner()).to.equal(otro.address);
+        });
+    });
+
     describe("Máquina de estados", function () {
         it("Activo -> Vendido y Activo -> Cancelado son terminales", async function () {
             const { reventa, vendedor, idListado } = await conListado();
@@ -308,7 +385,18 @@ describe("Reventa", function () {
     describe("huecos deliberados", function () {
         it.skip("invariante 7: una reentrada en comprar no compra dos veces ni retira de más", async function () {});
 
-        it.skip("listar no debe exigir aprobación infinita sobre toda la colección", async function () {});
+        it("listar no exige aprobación infinita sobre toda la colección: alcanza con aprobar esa entrada", async function () {
+            const { entrada, reventa, vendedor, tokenId } =
+                await conEntradaDelVendedor();
+            const mercado = await reventa.getAddress();
+            await entrada.connect(vendedor).approve(mercado, tokenId);
+            await expect(
+                reventa.connect(vendedor).listar(tokenId, PRECIO_LISTA)
+            ).to.emit(reventa, "Listado");
+            expect(
+                await entrada.isApprovedForAll(vendedor.address, mercado)
+            ).to.equal(false);
+        });
 
         it.skip("nadie puede pagar por fuera para burlar el techo de precio", async function () {});
 

@@ -1,0 +1,1089 @@
+# Corrida de tests ANTES de corregir (contratos sin las correcciones N1-N6/R1-R5)
+# Fecha: 2026-10-22 10:48:28 -0300
+# Commit base: fb59636 (contratos con F1-F6 aplicadas, sin commitear)
+# Comando: corepack pnpm test   (en 1-hardhat/)
+
+$ hardhat test
+
+Compiled 1 Solidity file with solc 0.8.34 (evm target: osaka)
+
+Running Solidity tests
+
+
+Running Mocha tests
+
+
+  Canje
+    definirCosto / consultarCosto
+      ✔ solo el organizador define costos y emite CostoDefinido (75ms)
+      ✔ consultarCosto devuelve lo definido
+    canjear
+      1) quema puntos y entrada usada, y entrega una de sector superior
+      2) revierte si la entrada no está Usada (invariante 1)
+      3) revierte si canjea quien no es el titular (invariante 2)
+      4) revierte si el destino no es superior al actual (invariante 5)
+      5) revierte si no hay costo definido para ese salto
+      6) revierte si los puntos no alcanzan
+      7) revierte sin autorización previa sobre los puntos
+      8) revierte sin autorización previa sobre la entrada
+      9) la misma entrada no se canjea dos veces (invariante 3)
+    Máquina de estados
+      ✔ el flujo completo exige Usada + titular + costo + 2 autorizaciones
+    transferOwnership
+      10) el traspaso necesita que el nuevo organizador lo acepte
+    huecos y ambigüedades — no implementar todavía
+      - [AMBIGUO] no se emite la mejora si el aforo del destino está completo (invariante 6)
+      11) invariante 7: si la mejora no se puede emitir, no se queman los puntos ni la entrada
+      12) las autorizaciones previas no deben ser infinitas: el canje consume la de puntos
+      - si el organizador olvida una designación, el canje falla en producción
+
+  Entrada - casos complementarios y seguridad
+    casos de la spec
+      ✔ usar revierte si el tokenId no existe
+      13) una entrada Usada transferida a otro dueno sigue sin poder usarse (invariante 3)
+      14) al agotar el stock cada tokenId se vende exactamente una vez
+      ✔ nadie puede mover una entrada Emitida (sin vender) que tiene el contrato
+      ✔ nadie puede aprobarse para una entrada Emitida
+      ✔ tokenURI revierte para un tokenId inexistente
+      15) transferOwnership traspasa los permisos de organizador
+    HALLAZGOS de seguridad (comportamiento vigente)
+      16) H1: renounceOwnership revierte y el organizador conserva los fondos
+      ✔ H2: fila/asiento '00' se aceptan y '01' no choca con '1'
+      ✔ H3: una comilla en la fila se rechaza al emitir
+      ✔ H4: emitir ignora en silencio las filas sobrantes
+
+  Entrada
+    Despliegue
+      ✔ almacena el precio y el portero fijados al desplegar
+      ✔ revierte si el portero es la direccion cero
+      ✔ revierte si el precio es cero
+    emitir
+      control de acceso (invariante 2)
+        ✔ revierte si llama un address distinto al organizador
+      validacion de entradas
+        ✔ revierte si el sector esta fuera de A-D (mayor que 4)
+        ✔ revierte si el sector es 0
+        ✔ acepta sectores 1, 2, 3 y 4 (A, B, C, D)
+        ✔ revierte si la fila es '0'
+        ✔ revierte si el asiento es '0'
+        ✔ acepta filas y asientos alfanumericos (la spec los permite)
+        ✔ revierte si la fila o el asiento traen caracteres no alfanumericos (inyeccion en tokenURI)
+        ✔ revierte si los arrays tienen longitudes distintas
+        ✔ revierte si se emite un lote vacio
+      asiento duplicado (invariante 1)
+        ✔ revierte si el (sector, fila, asiento) ya fue emitido
+        ✔ permite el mismo (fila, asiento) en distintos sectores
+        ✔ si una entrada del lote es duplicada, ninguna del lote se emite (atomicidad)
+      happy path
+        ✔ crea las entradas en estado Emitida y las asigna al contrato
+        ✔ actualiza los contadores emitidas y disponibles
+        ✔ emite EntradaEmitida por cada entrada con tokenId, sector, fila y asiento
+        ✔ asigna tokenIds secuenciales comenzando en 1 entre llamadas sucesivas
+    comprar
+      pago (invariante 6, decision pago exacto)
+        ✔ revierte si se paga de mas
+        ✔ revierte si se paga de menos
+        ✔ revierte si no se envia valor
+      sin entradas disponibles (decision)
+        ✔ revierte si nunca se emitio ninguna
+        17) revierte una vez agotadas las existentes
+      happy path y transicion de estado
+        18) asigna una entrada Emitida al comprador y la marca Vendida
+        19) acumula el Ether en el contrato sin entregarlo al organizador todavia
+        20) emite CompraReservada al pagar y EntradaComprada al confirmar
+        21) permite que un mismo comprador compre varias entradas (sin limite por direccion)
+        ✔ no permite al comprador elegir el asiento (comprar no recibe parametros)
+      azar de un bloque futuro (N1: simular y revertir)
+        22) pagar solo reserva: el asiento se asigna recien cuando existe el hash del bloque siguiente
+        23) un contrato atacante no puede comprar y revertir hasta conseguir el asiento que quiere
+        24) el asiento sale del hash del bloque siguiente a la reserva: no depende de quien ni cuando confirma
+    confirmarCompras
+      25) cualquiera puede confirmar y las reservas se procesan en orden de llegada
+      26) si nadie confirma en 256 bloques, la reserva se reprograma con un bloque nuevo
+    usar
+      control de acceso (invariante 4)
+        27) revierte si llama alguien distinto al portero (incluso el dueno)
+      estado valido (invariante 5)
+        ✔ revierte si la entrada aun esta Emitida (no Vendida)
+      invariante 3: entrada usada no se vuelve a usar
+        28) revierte la segunda llamada a usar
+      happy path
+        29) marca la entrada como Usada sin cambiar al dueno
+        30) emite el evento EntradaUsada con tokenId y dueno
+      ventana de ingreso (N3: el portero como oraculo)
+        31) con ventana definida, el portero solo marca durante el horario del evento
+    definirVentanaIngreso
+      32) solo el organizador la define, rechaza inicio >= fin y emite VentanaIngresoDefinida
+    retirar
+      control de acceso (invariante 7)
+        33) revierte si llama alguien distinto al organizador
+      fondos
+        ✔ revierte si el balance del contrato es cero
+      happy path
+        34) transfiere todo el Ether acumulado al organizador
+        35) emite el evento FondosRetirados con destinatario y monto
+        36) permite retirar varias veces (acumulando compras entre retiradas)
+    renounceOwnership
+      37) revierte: sin organizador lo recaudado quedaria atrapado para siempre
+    transferOwnership
+      38) el traspaso necesita que el nuevo organizador lo acepte (un error de tipeo no pierde el control)
+    quemar
+      39) un operador no puede quemar una entrada sin permiso de su dueño
+    tokenURI
+      40) devuelve un data URI base64 JSON con un SVG que menciona sector, fila y asiento
+    Transferencia ERC-721 (decision)
+      41) permite transferir una entrada Vendida entre dos cuentas
+      42) permite transferir una entrada Usada entre dos cuentas
+      43) cuenta los cambios de dueño entre personas (Reventa lo usa para invalidar listados viejos)
+    Maquina de estados
+      ✔ no existe una transicion Emitida -> Usada directa (usar exige Vendida)
+
+  Puntos
+    designarEmisor / designarQuemador
+      ✔ solo el organizador puede designar (y emite los eventos)
+      ✔ revierte si designa alguien distinto al organizador
+      ✔ redesignar reemplaza al anterior: el viejo deja de poder emitir
+    emitir
+      ✔ solo el emisor autorizado crea puntos (invariante 1)
+      ✔ acredita el saldo, suma al total y emite PuntosEmitidos
+      ✔ no emite dos veces por la misma asistencia (invariante 3)
+      ✔ sí emite por asistencias distintas del mismo titular
+    quemar
+      ✔ solo el quemador autorizado destruye puntos de otro (invariante 2)
+      ✔ descuenta el saldo, baja el total y emite PuntosQuemados
+      ✔ revierte si se quema más que el saldo
+    ERC-20 estándar
+      ✔ usa 18 decimales (decisión de la spec)
+      ✔ transfer mueve saldo entre cuentas y emite Transfer
+      ✔ transfer revierte si deja al remitente en negativo (invariante 5)
+      ✔ transferFrom no mueve más de lo autorizado (invariante 6)
+      ✔ transferFrom descuenta lo autorizado al mover (invariante 6)
+      ✔ totalSupply es la suma de saldos tras emitir, mover y quemar (invariante 4)
+      ✔ los puntos son transferibles libremente (decisión de la spec)
+    transferOwnership
+      44) el traspaso necesita que el nuevo organizador lo acepte
+    Máquina de estados
+      ✔ sin emisor designado nadie emite; sin quemador nadie quema
+    hueco deliberado
+      - nadie puede afirmar una asistencia que no ocurrió
+      - [INTEGRACIÓN] Entrada emite los puntos al marcar Usada
+
+  Reventa
+    configurar
+      ✔ solo el organizador configura y emite Configurado
+      ✔ revierte si la comisión supera el 100% (toda compra revertiría)
+    listar
+      45) el titular lista con approve previo y emite Listado
+      46) revierte si la entrada ya fue usada (invariante 1)
+      47) revierte si lista quien no posee la entrada (invariante 2)
+      48) revierte sobre el techo y acepta justo en el techo (invariante 3)
+      49) revierte sin autorización previa sobre el token
+    comprar
+      50) paga el precio exacto y recibe la entrada en la misma tx (invariante 5)
+      51) la comisión queda fijada al listar: subirla después no recorta al vendedor
+      52) revierte si el pago no es exacto
+      53) un listado vendido no se puede volver a comprar (invariante 4)
+      54) un listado cancelado no se puede comprar (invariante 4)
+      55) un listado viejo no se puede comprar si la entrada cambió de dueño después de listarse
+      56) si la entrada se usa mientras está listada, la compra revierte
+      57) el vendedor cobra sin la comisión y el organizador la suya (invariante 6, pull)
+    cancelar
+      58) solo el vendedor cancela, emite Cancelado y conserva su entrada
+      59) revierte si cancela alguien distinto al vendedor
+      60) un listado ya vendido no se puede cancelar
+    retirar
+      61) el vendedor retira precio menos comisión y emite Retirado
+      62) el organizador retira la comisión acumulada
+      63) revierte si no hay fondos para retirar y al segundo retiro (invariante 8)
+    renounceOwnership
+      ✔ revierte: la comisión se acredita al organizador y quedaría atrapada (invariante 8)
+    transferOwnership
+      64) el traspaso necesita que el nuevo organizador lo acepte
+    Máquina de estados
+      65) Activo -> Vendido y Activo -> Cancelado son terminales
+    huecos deliberados
+      - invariante 7: una reentrada en comprar no compra dos veces ni retira de más
+      66) listar no exige aprobación infinita sobre toda la colección: alcanza con aprobar esa entrada
+      - nadie puede pagar por fuera para burlar el techo de precio
+      - una compra vista en el mempool no debe poder ser adelantada (front-running)
+
+  Sorteo
+    abrirSorteo
+      ✔ revierte si llama alguien distinto al organizador
+      ✔ emite SorteoAbierto con la cantidad de entradas anunciada
+      67) no se puede reabrir: ni con el sorteo en curso ni después del cierre
+      68) revierte si se anuncian más entradas de las que entran en un cierre (tope por gas)
+    comprometer
+      ✔ acepta el compromiso con depósito y emite PostulacionComprometida
+      ✔ revierte si el depósito es insuficiente (invariante: depósito requerido)
+      ✔ revierte si el depósito excede lo requerido (el excedente quedaría atrapado)
+      ✔ revierte si el mismo postulante compromete dos veces
+      ✔ revierte si no hay sorteo abierto
+      ✔ revierte una vez vencido el plazo de compromiso (invariante 2)
+    revelar
+      ✔ acepta la revelación que coincide y emite PostulacionRevelada
+      ✔ revierte si el valor no corresponde al compromiso (invariante 1)
+      ✔ revierte si se revela antes de que termine el compromiso (invariante 3)
+      ✔ revierte la segunda revelación del mismo postulante
+      ✔ revierte si revela quien nunca comprometió
+      ✔ el compromiso copiado de otro no sirve: incluye la dirección
+    cerrar
+      ✔ revierte si todavía no venció el plazo de revelación
+      69) cualquiera puede cerrar vencido el plazo: primero fija el bloque, después sortea
+      70) el cierre no se bloquea si un comprometido nunca reveló
+      71) si nadie completa el cierre en 256 bloques, se fija un bloque nuevo
+      72) el costo de cerrar no crece con la cantidad de postulantes (sin DoS)
+    reclamar
+      ✔ revierte si el sorteo todavía no cerró
+      73) el ganador recibe su entrada y emite EntradaReclamada (invariante 4)
+      74) nadie reclama dos veces (invariante 6)
+      75) no se entregan más entradas que las anunciadas (invariante 5)
+      76) con más postulantes que entradas ganan exactamente las anunciadas, una por cabeza (invariantes 4, 5 y 7)
+      77) quien reveló y perdió recupera su depósito (invariante 7)
+      78) revierte si reclama quien no reveló
+    retirar
+      79) el organizador retira los depósitos que no se devuelven: el del ganador y el de quien no reveló
+      80) revierte antes del cierre, si llama otro y cuando no queda nada que retirar
+    renounceOwnership
+      81) revierte: el organizador retira lo recaudado y sin él quedaría atrapado
+    transferOwnership
+      82) el traspaso necesita que el nuevo organizador lo acepte
+    Máquina de estados
+      83) Abierto -> En revelación -> Cerrado solo avanza con el tiempo
+    huecos deliberados
+      84) invariante 8: el resultado no se puede calcular antes de que termine la revelación
+      85) quien no revela no puede reclamar y su depósito pasa al organizador (consecuencia definida)
+
+
+  75 passing (2s)
+  7 pending
+  85 failing
+
+  1) Canje
+       canjear
+         quema puntos y entrada usada, y entrega una de sector superior:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:120:25)
+
+  2) Canje
+       canjear
+         revierte si la entrada no está Usada (invariante 1):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async Context.<anonymous> (test\Canje.ts:149:13)
+
+  3) Canje
+       canjear
+         revierte si canjea quien no es el titular (invariante 2):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:158:25)
+
+  4) Canje
+       canjear
+         revierte si el destino no es superior al actual (invariante 5):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:166:25)
+
+  5) Canje
+       canjear
+         revierte si no hay costo definido para ese salto:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:176:25)
+
+  6) Canje
+       canjear
+         revierte si los puntos no alcanzan:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:184:25)
+
+  7) Canje
+       canjear
+         revierte sin autorización previa sobre los puntos:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:192:25)
+
+  8) Canje
+       canjear
+         revierte sin autorización previa sobre la entrada:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:203:25)
+
+  9) Canje
+       canjear
+         la misma entrada no se canjea dos veces (invariante 3):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:214:25)
+
+  10) Canje
+       transferOwnership
+         el traspaso necesita que el nuevo organizador lo acepte:
+
+      AssertionError: expected '0x90F79bf6EB2c4f870365E785982E1f101E93b906' to equal '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'.
+      + expected - actual
+
+      -0x90F79bf6EB2c4f870365E785982E1f101E93b906
+      +0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+      
+      at Context.<anonymous> (test\Canje.ts:239:44)
+
+  11) Canje
+       huecos y ambigüedades — no implementar todavía
+         invariante 7: si la mejora no se puede emitir, no se queman los puntos ni la entrada:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:256:25)
+
+  12) Canje
+       huecos y ambigüedades — no implementar todavía
+         las autorizaciones previas no deben ser infinitas: el canje consume la de puntos:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Canje.ts:45:38)
+      at async conEntradaUsada (test\Canje.ts:77:5)
+      at async Context.<anonymous> (test\Canje.ts:272:25)
+
+  13) Entrada - casos complementarios y seguridad
+       casos de la spec
+         una entrada Usada transferida a otro dueno sigue sin poder usarse (invariante 3):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.seguridad.ts:29:38)
+      at async conUnaVendida (test\Entrada.seguridad.ts:49:5)
+      at async Context.<anonymous> (test\Entrada.seguridad.ts:66:68)
+
+  14) Entrada - casos complementarios y seguridad
+       casos de la spec
+         al agotar el stock cada tokenId se vende exactamente una vez:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.seguridad.ts:29:38)
+      at async Context.<anonymous> (test\Entrada.seguridad.ts:81:17)
+
+  15) Entrada - casos complementarios y seguridad
+       casos de la spec
+         transferOwnership traspasa los permisos de organizador:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.seguridad.ts:29:38)
+      at async Context.<anonymous> (test\Entrada.seguridad.ts:120:13)
+
+  16) Entrada - casos complementarios y seguridad
+       HALLAZGOS de seguridad (comportamiento vigente)
+         H1: renounceOwnership revierte y el organizador conserva los fondos:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.seguridad.ts:29:38)
+      at async Context.<anonymous> (test\Entrada.seguridad.ts:140:13)
+
+  17) Entrada
+       comprar
+         sin entradas disponibles (decision)
+           revierte una vez agotadas las existentes:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:323:17)
+
+  18) Entrada
+       comprar
+         happy path y transicion de estado
+           asigna una entrada Emitida al comprador y la marca Vendida:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:338:17)
+
+  19) Entrada
+       comprar
+         happy path y transicion de estado
+           acumula el Ether en el contrato sin entregarlo al organizador todavia:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:351:17)
+
+  20) Entrada
+       comprar
+         happy path y transicion de estado
+           emite CompraReservada al pagar y EntradaComprada al confirmar:
+     AssertionError: Event "CompraReservada" doesn't exist in the contract
+      at onSuccess (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\emit.ts:100:17)
+      at <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\emit.ts:150:20)
+      at async Context.<anonymous> (test\Entrada.ts:359:17)
+
+  21) Entrada
+       comprar
+         happy path y transicion de estado
+           permite que un mismo comprador compre varias entradas (sin limite por direccion):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:372:17)
+
+  22) Entrada
+       comprar
+         azar de un bloque futuro (N1: simular y revertir)
+           pagar solo reserva: el asiento se asigna recien cuando existe el hash del bloque siguiente:
+
+      AssertionError: expected 1 to equal 0.
+      + expected - actual
+
+      -1
+      +0
+      
+      at Context.<anonymous> (test\Entrada.ts:391:71)
+
+  23) Entrada
+       comprar
+         azar de un bloque futuro (N1: simular y revertir)
+           un contrato atacante no puede comprar y revertir hasta conseguir el asiento que quiere:
+
+      AssertionError: expected true to equal false
+      + expected - actual
+
+      -true
+      +false
+      
+      at Context.<anonymous> (test\Entrada.ts:416:38)
+
+  24) Entrada
+       comprar
+         azar de un bloque futuro (N1: simular y revertir)
+           el asiento sale del hash del bloque siguiente a la reserva: no depende de quien ni cuando confirma:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at Context.<anonymous> (test\Entrada.ts:426:45)
+
+  25) Entrada
+       confirmarCompras
+         cualquiera puede confirmar y las reservas se procesan en orden de llegada:
+     AssertionError: Event "CompraReservada" doesn't exist in the contract
+      at onSuccess (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\emit.ts:100:17)
+      at <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\emit.ts:150:20)
+      at async Context.<anonymous> (test\Entrada.ts:443:13)
+
+  26) Entrada
+       confirmarCompras
+         si nadie confirma en 256 bloques, la reserva se reprograma con un bloque nuevo:
+     TypeError: entrada.confirmarCompras is not a function
+      at Context.<anonymous> (test\Entrada.ts:460:34)
+
+  27) Entrada
+       usar
+         control de acceso (invariante 4)
+           revierte si llama alguien distinto al portero (incluso el dueno):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:477:21)
+
+  28) Entrada
+       usar
+         invariante 3: entrada usada no se vuelve a usar
+           revierte la segunda llamada a usar:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:500:57)
+
+  29) Entrada
+       usar
+         happy path
+           marca la entrada como Usada sin cambiar al dueno:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:511:57)
+
+  30) Entrada
+       usar
+         happy path
+           emite el evento EntradaUsada con tokenId y dueno:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:519:57)
+
+  31) Entrada
+       usar
+         ventana de ingreso (N3: el portero como oraculo)
+           con ventana definida, el portero solo marca durante el horario del evento:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:530:17)
+
+  32) Entrada
+       definirVentanaIngreso
+         solo el organizador la define, rechaza inicio >= fin y emite VentanaIngresoDefinida:
+     TypeError: entrada.connect(...).definirVentanaIngreso is not a function
+      at Context.<anonymous> (test\Entrada.ts:560:42)
+
+  33) Entrada
+       retirar
+         control de acceso (invariante 7)
+           revierte si llama alguien distinto al organizador:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:575:63)
+
+  34) Entrada
+       retirar
+         happy path
+           transfiere todo el Ether acumulado al organizador:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:596:17)
+
+  35) Entrada
+       retirar
+         happy path
+           emite el evento FondosRetirados con destinatario y monto:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:613:50)
+
+  36) Entrada
+       retirar
+         happy path
+           permite retirar varias veces (acumulando compras entre retiradas):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async Context.<anonymous> (test\Entrada.ts:621:17)
+
+  37) Entrada
+       renounceOwnership
+         revierte: sin organizador lo recaudado quedaria atrapado para siempre:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:635:46)
+
+  38) Entrada
+       transferOwnership
+         el traspaso necesita que el nuevo organizador lo acepte (un error de tipeo no pierde el control):
+
+      AssertionError: expected '0x90F79bf6EB2c4f870365E785982E1f101E93b906' to equal '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'.
+      + expected - actual
+
+      -0x90F79bf6EB2c4f870365E785982E1f101E93b906
+      +0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+      
+      at Context.<anonymous> (test\Entrada.ts:651:46)
+
+  39) Entrada
+       quemar
+         un operador no puede quemar una entrada sin permiso de su dueño:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:663:50)
+
+  40) Entrada
+       tokenURI
+         devuelve un data URI base64 JSON con un SVG que menciona sector, fila y asiento:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:681:44)
+
+  41) Entrada
+       Transferencia ERC-721 (decision)
+         permite transferir una entrada Vendida entre dos cuentas:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:705:50)
+
+  42) Entrada
+       Transferencia ERC-721 (decision)
+         permite transferir una entrada Usada entre dos cuentas:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:718:59)
+
+  43) Entrada
+       Transferencia ERC-721 (decision)
+         cuenta los cambios de dueño entre personas (Reventa lo usa para invalidar listados viejos):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Entrada.ts:59:38)
+      at async conUnaVendida (test\Entrada.ts:73:5)
+      at async Context.<anonymous> (test\Entrada.ts:731:50)
+
+  44) Puntos
+       transferOwnership
+         el traspaso necesita que el nuevo organizador lo acepte:
+
+      AssertionError: expected '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65' to equal '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'.
+      + expected - actual
+
+      -0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+      +0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+      
+      at Context.<anonymous> (test\Puntos.ts:222:45)
+
+  45) Reventa
+       listar
+         el titular lista con approve previo y emite Listado:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:112:17)
+
+  46) Reventa
+       listar
+         revierte si la entrada ya fue usada (invariante 1):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:125:17)
+
+  47) Reventa
+       listar
+         revierte si lista quien no posee la entrada (invariante 2):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:136:48)
+
+  48) Reventa
+       listar
+         revierte sobre el techo y acepta justo en el techo (invariante 3):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:144:17)
+
+  49) Reventa
+       listar
+         revierte sin autorización previa sobre el token:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:159:17)
+
+  50) Reventa
+       comprar
+         paga el precio exacto y recibe la entrada en la misma tx (invariante 5):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:169:17)
+
+  51) Reventa
+       comprar
+         la comisión queda fijada al listar: subirla después no recorta al vendedor:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:185:17)
+
+  52) Reventa
+       comprar
+         revierte si el pago no es exacto:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:200:55)
+
+  53) Reventa
+       comprar
+         un listado vendido no se puede volver a comprar (invariante 4):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:209:61)
+
+  54) Reventa
+       comprar
+         un listado cancelado no se puede comprar (invariante 4):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:220:17)
+
+  55) Reventa
+       comprar
+         un listado viejo no se puede comprar si la entrada cambió de dueño después de listarse:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:234:17)
+
+  56) Reventa
+       comprar
+         si la entrada se usa mientras está listada, la compra revierte:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:252:17)
+
+  57) Reventa
+       comprar
+         el vendedor cobra sin la comisión y el organizador la suya (invariante 6, pull):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:262:25)
+
+  58) Reventa
+       cancelar
+         solo el vendedor cancela, emite Cancelado y conserva su entrada:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:280:17)
+
+  59) Reventa
+       cancelar
+         revierte si cancela alguien distinto al vendedor:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:288:55)
+
+  60) Reventa
+       cancelar
+         un listado ya vendido no se puede cancelar:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:296:17)
+
+  61) Reventa
+       retirar
+         el vendedor retira precio menos comisión y emite Retirado:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async conVenta (test\Reventa.ts:309:25)
+      at async Context.<anonymous> (test\Reventa.ts:317:25)
+
+  62) Reventa
+       retirar
+         el organizador retira la comisión acumulada:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async conVenta (test\Reventa.ts:309:25)
+      at async Context.<anonymous> (test\Reventa.ts:332:25)
+
+  63) Reventa
+       retirar
+         revierte si no hay fondos para retirar y al segundo retiro (invariante 8):
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async conVenta (test\Reventa.ts:309:25)
+      at async Context.<anonymous> (test\Reventa.ts:344:25)
+
+  64) Reventa
+       transferOwnership
+         el traspaso necesita que el nuevo organizador lo acepte:
+
+      AssertionError: expected '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65' to equal '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'.
+      + expected - actual
+
+      -0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+      +0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+      
+      at Context.<anonymous> (test\Reventa.ts:369:46)
+
+  65) Reventa
+       Máquina de estados
+         Activo -> Vendido y Activo -> Cancelado son terminales:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async conListado (test\Reventa.ts:74:17)
+      at async Context.<anonymous> (test\Reventa.ts:377:54)
+
+  66) Reventa
+       huecos deliberados
+         listar no exige aprobación infinita sobre toda la colección: alcanza con aprobar esa entrada:
+     TypeError: entrada.connect(...).confirmarCompras is not a function
+      at comprarEntrada (test\Reventa.ts:47:38)
+      at async conEntradaDelVendedor (test\Reventa.ts:68:5)
+      at async Context.<anonymous> (test\Reventa.ts:390:17)
+
+  67) Sorteo
+       abrirSorteo
+         no se puede reabrir: ni con el sorteo en curso ni después del cierre:
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  68) Sorteo
+       abrirSorteo
+         revierte si se anuncian más entradas de las que entran en un cierre (tope por gas):
+     AssertionError: The given contract doesn't have a custom error named "DemasiadasEntradas"
+      at validateInput (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\reverted\revertedWithCustomError.ts:201:18)
+      at Proxy.<anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\reverted\revertedWithCustomError.ts:48:46)
+      at Proxy.methodWrapper (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai@6.2.2/node_modules/chai/index.js:1700:25)
+      at doAsserterAsyncAndAddThen (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai-as-promised@8.0.2_chai@6.2.2/node_modules/chai-as-promised/lib/chai-as-promised.js:340:16)
+      at Proxy.<anonymous> (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai-as-promised@8.0.2_chai@6.2.2/node_modules/chai-as-promised/lib/chai-as-promised.js:294:18)
+      at Proxy.overwritingMethodWrapper (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai@6.2.2/node_modules/chai/index.js:1750:33)
+      at Context.<anonymous> (test\Sorteo.ts:178:21)
+
+  69) Sorteo
+       cerrar
+         cualquiera puede cerrar vencido el plazo: primero fija el bloque, después sortea:
+     AssertionError: Event "CierreSolicitado" doesn't exist in the contract
+      at onSuccess (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\emit.ts:100:17)
+      at <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\emit.ts:150:20)
+      at async Context.<anonymous> (test\Sorteo.ts:317:13)
+
+  70) Sorteo
+       cerrar
+         el cierre no se bloquea si un comprometido nunca reveló:
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  71) Sorteo
+       cerrar
+         si nadie completa el cierre en 256 bloques, se fija un bloque nuevo:
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  72) Sorteo
+       cerrar
+         el costo de cerrar no crece con la cantidad de postulantes (sin DoS):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  73) Sorteo
+       reclamar
+         el ganador recibe su entrada y emite EntradaReclamada (invariante 4):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  74) Sorteo
+       reclamar
+         nadie reclama dos veces (invariante 6):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  75) Sorteo
+       reclamar
+         no se entregan más entradas que las anunciadas (invariante 5):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  76) Sorteo
+       reclamar
+         con más postulantes que entradas ganan exactamente las anunciadas, una por cabeza (invariantes 4, 5 y 7):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  77) Sorteo
+       reclamar
+         quien reveló y perdió recupera su depósito (invariante 7):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  78) Sorteo
+       reclamar
+         revierte si reclama quien no reveló:
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  79) Sorteo
+       retirar
+         el organizador retira los depósitos que no se devuelven: el del ganador y el de quien no reveló:
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  80) Sorteo
+       retirar
+         revierte antes del cierre, si llama otro y cuando no queda nada que retirar:
+     TypeError: sorteo.retirar is not a function
+      at Context.<anonymous> (test\Sorteo.ts:482:33)
+
+  81) Sorteo
+       renounceOwnership
+         revierte: el organizador retira lo recaudado y sin él quedaría atrapado:
+     AssertionError: The given contract doesn't have a custom error named "RenunciaDeshabilitada"
+      at validateInput (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\reverted\revertedWithCustomError.ts:201:18)
+      at Proxy.<anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\@nomicfoundation+hardhat-et_b0027453fceeb204f1bc4471b9ce91ec\node_modules\@nomicfoundation\hardhat-ethers-chai-matchers\src\internal\matchers\reverted\revertedWithCustomError.ts:48:46)
+      at Proxy.methodWrapper (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai@6.2.2/node_modules/chai/index.js:1700:25)
+      at doAsserterAsyncAndAddThen (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai-as-promised@8.0.2_chai@6.2.2/node_modules/chai-as-promised/lib/chai-as-promised.js:340:16)
+      at Proxy.<anonymous> (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai-as-promised@8.0.2_chai@6.2.2/node_modules/chai-as-promised/lib/chai-as-promised.js:294:18)
+      at Proxy.overwritingMethodWrapper (file:///F:/smartContract/puerta7/node_modules/.pnpm/chai@6.2.2/node_modules/chai/index.js:1750:33)
+      at Context.<anonymous> (test\Sorteo.ts:500:60)
+
+  82) Sorteo
+       transferOwnership
+         el traspaso necesita que el nuevo organizador lo acepte:
+
+      AssertionError: expected '0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc' to equal '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'.
+      + expected - actual
+
+      -0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+      +0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+      
+      at Context.<anonymous> (test\Sorteo.ts:512:45)
+
+  83) Sorteo
+       Máquina de estados
+         Abierto -> En revelación -> Cerrado solo avanza con el tiempo:
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+  84) Sorteo
+       huecos deliberados
+         invariante 8: el resultado no se puede calcular antes de que termine la revelación:
+     TypeError: sorteo.bloqueSorteo is not a function
+      at Context.<anonymous> (test\Sorteo.ts:555:47)
+
+  85) Sorteo
+       huecos deliberados
+         quien no revela no puede reclamar y su depósito pasa al organizador (consecuencia definida):
+     SolidityError: VM Exception while processing transaction: reverted with custom error 'SorteoNoAbierto()'
+      at Sorteo.cerrar (contracts/Sorteo.sol:154)
+      at EdrProvider.#handleEdrResponse (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:214:25)
+      at EdrProvider.#handleRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:295:45)
+      at async <anonymous> (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\network-manager.ts:278:49)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:208:13)
+      at async Array.onRequest (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\hook-handlers\network.ts:81:14)
+      at async next (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:207:13)
+      at async HookManagerImplementation.runHandlerChain (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\core\hook-manager.ts:213:12)
+      at async EdrProvider.request (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\dist\src\internal\builtin-plugins\network-manager\edr\edr-provider.js:140:31)
+      at async AutomaticGasHandler.getMultipliedGasEstimation (F:\smartContract\puerta7\node_modules\.pnpm\hardhat@3.18.0_bufferutil@4.1.0_utf-8-validate@5.0.10\node_modules\hardhat\src\internal\builtin-plugins\network-manager\request-handlers\handlers\gas\multiplied-gas-estimation.ts:50:30)
+
+
+
+
+82 passing (82 mocha)
+85 failing (85 mocha)
+
+Test run failed
+[ELIFECYCLE] Test failed. See above for more details.

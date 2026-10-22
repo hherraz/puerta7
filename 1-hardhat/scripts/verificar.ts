@@ -85,12 +85,19 @@ async function main() {
     console.log(`  emitidas()    = ${await entrada.emitidas()}`);
     console.log(`  disponibles() = ${await entrada.disponibles()}`);
 
+    // Compra en dos pasos: pagar reserva; el asiento sale del hash del
+    // bloque siguiente, así que hay que dejarlo minar antes de confirmar.
     const precio = await entrada.precio();
-    const receipt = await (await entrada.connect(comprador).comprar({ value: precio })).wait();
+    await (await entrada.connect(comprador).comprar({ value: precio })).wait();
+    await ethers.provider.send("evm_mine", []);
+    const receipt = await (await entrada.connect(comprador).confirmarCompras(10)).wait();
 
     // `Entrada` es ERC-721 plano, sin `Enumerable`: no hay
-    // `tokenOfOwnerByIndex`. El tokenId se saca del propio evento de compra,
-    // que además es lo que mira el front para actualizar la UI.
+    // `tokenOfOwnerByIndex`. El tokenId se saca del evento de la
+    // confirmación, que además es lo que mira el front para actualizar la
+    // UI. Se filtra por comprador: la confirmación procesa en orden de
+    // llegada y puede incluir reservas de otros.
+    const direccionComprador = await comprador.getAddress();
     const comprado = receipt.logs
         .map((log) => {
             try {
@@ -99,7 +106,10 @@ async function main() {
                 return null;
             }
         })
-        .find((log) => log?.name === "EntradaComprada");
+        .find(
+            (log) =>
+                log?.name === "EntradaComprada" && log.args[1] === direccionComprador,
+        );
 
     const tokenId = comprado?.args[0] as bigint;
     const duenio = await entrada.balanceOf(await comprador.getAddress());

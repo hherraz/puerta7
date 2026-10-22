@@ -350,6 +350,38 @@ export const ENTRADA_ABI = [
             {
                 "indexed": true,
                 "internalType": "uint256",
+                "name": "idReserva",
+                "type": "uint256"
+            }
+        ],
+        "name": "CompraReprogramada",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "idReserva",
+                "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "comprador",
+                "type": "address"
+            }
+        ],
+        "name": "CompraReservada",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
                 "name": "tokenId",
                 "type": "uint256"
             },
@@ -486,6 +518,25 @@ export const ENTRADA_ABI = [
                 "type": "address"
             }
         ],
+        "name": "OwnershipTransferStarted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
         "name": "OwnershipTransferred",
         "type": "event"
     },
@@ -513,6 +564,32 @@ export const ENTRADA_ABI = [
         ],
         "name": "Transfer",
         "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "inicio",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "fin",
+                "type": "uint256"
+            }
+        ],
+        "name": "VentanaIngresoDefinida",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "acceptOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     },
     {
         "inputs": [
@@ -562,6 +639,19 @@ export const ENTRADA_ABI = [
         "inputs": [
             {
                 "internalType": "uint256",
+                "name": "maximo",
+                "type": "uint256"
+            }
+        ],
+        "name": "confirmarCompras",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
                 "name": "tokenId",
                 "type": "uint256"
             }
@@ -585,6 +675,24 @@ export const ENTRADA_ABI = [
             }
         ],
         "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "inicio",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "fin",
+                "type": "uint256"
+            }
+        ],
+        "name": "definirVentanaIngreso",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function"
     },
     {
@@ -708,6 +816,19 @@ export const ENTRADA_ABI = [
         "type": "function"
     },
     {
+        "inputs": [],
+        "name": "finIngreso",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
         "inputs": [
             {
                 "internalType": "uint256",
@@ -721,6 +842,19 @@ export const ENTRADA_ABI = [
                 "internalType": "address",
                 "name": "",
                 "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "inicioIngreso",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -816,6 +950,19 @@ export const ENTRADA_ABI = [
     },
     {
         "inputs": [],
+        "name": "pendingOwner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "portero",
         "outputs": [
             {
@@ -857,7 +1004,7 @@ export const ENTRADA_ABI = [
         "inputs": [],
         "name": "renounceOwnership",
         "outputs": [],
-        "stateMutability": "nonpayable",
+        "stateMutability": "pure",
         "type": "function"
     },
     {
@@ -1021,6 +1168,25 @@ export const ENTRADA_ABI = [
         "name": "transferOwnership",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "tokenId",
+                "type": "uint256"
+            }
+        ],
+        "name": "transferencias",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
